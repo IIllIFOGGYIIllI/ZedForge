@@ -9,7 +9,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/logo.svg">
 <link rel="stylesheet" href="./styles.css">
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+<script src="./vendor/jszip.min.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body data-theme="obsidian">
@@ -21,18 +21,20 @@
   <button class="nav-link active" data-view="dashboard"><span>◈</span> Overview</button>
   <button class="nav-link" data-view="files"><span>▣</span> File Manager</button>
   <button class="nav-link" data-view="booster"><span>⬡</span> Loot Booster</button>
+  <button class="nav-link" data-view="editor"><span>✎</span> Item Editor</button>
+  <button class="nav-link" data-view="changes"><span>⇄</span> Change Review</button>
   <button class="nav-link" data-view="validation"><span>◇</span> Validation</button>
  </nav>
  <div class="side-label second-label">COMING LATER</div>
  <div class="muted-link">✧ Vehicle Studio <span>SOON</span></div>
  <div class="muted-link">✧ Map Editor <span>SOON</span></div>
- <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.1.0</b></div><p>Local processing • No account needed</p></div>
+ <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.2.0</b></div><p>Local processing • No account needed</p></div>
 </aside>
 <div class="main-wrap">
 <header class="topbar"><button class="menu-button" id="mobile-menu" aria-label="Toggle menu">☰</button><div class="breadcrumb">ZEDFORGE <span>/</span> <strong id="page-crumb">Overview</strong></div><div class="header-right"><span class="local-badge"><i></i> LOCAL WORKSPACE</span><select id="theme" aria-label="Interface theme"><option value="obsidian">Obsidian</option><option value="tactical">Tactical Olive</option><option value="midnight">Midnight Blue</option><option value="arctic">Arctic Light</option></select></div></header>
 <main>
 <section class="view" id="view-dashboard">
- <div class="page-heading"><div class="eyebrow">CONSOLE SERVER TOOLKIT / ALPHA 01</div><h1>Forge your survival.</h1><p>Import your DayZ server configuration, fine-tune your loot economy, and export only what changed. Your files stay on your device.</p></div>
+ <div class="page-heading"><div class="eyebrow">CONSOLE SERVER TOOLKIT / ALPHA 02</div><h1>Forge your survival.</h1><p>Import your DayZ server configuration, fine-tune your loot economy, and export only what changed. Your files stay on your device.</p></div>
  <div class="stats"><article class="stat"><span>Imported files</span><strong id="stat-files">0</strong><small>XML & JSON</small></article><article class="stat"><span>Economy items</span><strong id="stat-items">0</strong><small>Indexed classnames</small></article><article class="stat"><span>Modified files</span><strong id="stat-changed">0</strong><small>Ready for export</small></article></div>
  <div class="two-col">
   <article class="panel upload-panel" id="dropzone" tabindex="0" role="button" aria-label="Import server files"><div class="upload-icon">⇧</div><h2>Import server configuration</h2><p>Drop XML, JSON, or a ZIP archive here. Existing files are never overwritten on your computer.</p><button class="primary" id="choose-files">Choose files</button><small>Multi-file import supported • Max 40 MB per archive</small></article>
@@ -41,8 +43,8 @@
  <div class="notice"><strong>Designed for console servers.</strong> This alpha focuses on loot configuration. It does not connect to Nitrado, restart servers, or install PC mods.</div>
 </section>
 <section class="view hidden" id="view-files">
- <div class="page-heading compact"><div class="eyebrow">WORKSPACE / FILE MANAGER</div><h1>Configuration files</h1><p>Imported files are held only in this browser session. Select a file to inspect, revert, or download.</p></div>
- <div class="toolbar"><button class="primary" id="add-files">+ Import files</button><button class="secondary" id="export-zip">Export changed ZIP</button><button class="secondary" id="export-all-zip">Export full ZIP</button><button class="danger" id="clear-files">Clear workspace</button></div>
+ <div class="page-heading compact"><div class="eyebrow">WORKSPACE / FILE MANAGER</div><h1>Configuration files</h1><p>Your workspace is saved locally in this browser. You can also preview, restore, or download each file.</p></div>
+ <div class="toolbar"><button class="primary" id="add-files">+ Import files</button><button class="secondary" id="export-zip">Export changed ZIP</button><button class="secondary" id="export-all-zip">Export full ZIP</button><button class="danger" id="clear-files">Clear workspace</button><span id="persist-indicator" class="storage-status" role="status">Checking local storage…</span></div>
  <div class="panel table-panel"><div class="panel-title"><h2>Imported files</h2><span id="file-count-label">0 files</span></div><div class="table-scroll"><table><thead><tr><th>File</th><th>Type</th><th>Status</th><th>Action</th></tr></thead><tbody id="files-body"><tr><td colspan="4" class="empty">No files imported yet.</td></tr></tbody></table></div></div>
  <div class="panel inspector"><div class="panel-title"><h2>File preview</h2><span id="preview-name">No file selected</span></div><pre id="file-preview">Import a file to view its contents.</pre></div>
 </section>
@@ -52,15 +54,47 @@
   <div class="control-grid">
    <label>Economy file<select id="economy-file"><option value="">Import types.xml first</option></select></label>
    <label>Category filter<select id="category"><option value="all">All categories</option><option value="weapons">Weapons</option><option value="ammo">Ammunition & magazines</option><option value="food">Food & drink</option><option value="medical">Medical</option><option value="building">Building materials</option><option value="clothing">Clothing</option><option value="vehicles">Vehicle parts</option><option value="other">Other / uncategorised</option></select></label>
-   <label>Quantity multiplier<select id="multiplier"><option value="1.5">150% (1.5×)</option><option value="2" selected>200% (2×)</option><option value="3">300% (3×)</option><option value="5">500% (5×)</option><option value="10">1000% (10×)</option></select></label>
+   <label>Operation<select id="boost-mode"><option value="multiply">Multiply existing values</option><option value="exact">Set exact values</option></select></label>
+   <label>Multiplier / target value<input id="boost-value" type="number" min="0" max="1000000" step="0.1" value="2"></label>
    <label>Modify<select id="field-mode"><option value="both">Nominal and minimum</option><option value="nominal">Nominal only</option><option value="min">Minimum only</option></select></label>
   </div>
-  <div class="booster-options"><label><input id="include-zero" type="checkbox"> Include zero-population items</label><label><input id="selected-only" type="checkbox"> Modify selected items only</label></div>
+  <div class="booster-options"><label><input id="include-zero" type="checkbox"> Include zero-population items (exact mode)</label><label><input id="selected-only" type="checkbox"> Modify selected items only</label></div>
   <div class="toolbar"><button class="primary" id="preview-boost">Preview boost</button><button class="secondary" id="reset-economy">Restore original file</button><button class="secondary" id="download-economy">Download selected XML</button></div>
-  <div id="boost-feedback" class="feedback" role="status" aria-live="polite">Import a types.xml file to begin.</div>
+  <div id="boost-feedback" class="feedback" role="status" aria-live="polite">Import a types.xml file to begin. Changes are always previewed before they are applied.</div>
  </div>
  <div class="panel table-panel"><div class="panel-title"><h2>Economy items</h2><span id="item-count-label">0 items</span></div><div class="search-row"><input id="item-search" type="search" placeholder="Search by classname…" aria-label="Search classnames"><button id="select-visible" class="secondary">Select visible</button><button id="deselect-all" class="secondary">Clear selection</button></div><div class="table-scroll"><table><thead><tr><th><span class="sr-only">Selected</span></th><th>Classname</th><th>Category</th><th>Nominal</th><th>Minimum</th></tr></thead><tbody id="items-body"><tr><td colspan="5" class="empty">No economy file loaded.</td></tr></tbody></table></div></div>
  </section>
+<section class="view hidden" id="view-editor">
+ <div class="page-heading compact"><div class="eyebrow">ECONOMY STUDIO / ITEM EDITOR</div><h1>Edit every value.</h1><p>Make precise changes to an individual classname, preserving unrelated XML tags, comments, and formatting.</p></div>
+ <div class="panel">
+ <div class="editor-layout">
+  <div class="editor-browser">
+   <label class="field-label" for="editor-file">Economy file</label><select id="editor-file"><option value="">Import types.xml first</option></select>
+   <label class="field-label" for="editor-search">Search item</label><input id="editor-search" type="search" placeholder="Search classnames…">
+   <select id="editor-item" size="15" aria-label="Select item to edit"><option value="">Import types.xml to start</option></select>
+  </div>
+  <div class="editor-detail">
+   <div class="section-eyebrow">SELECTED CLASSNAME</div><h2 id="editor-item-name">Select an item</h2>
+   <div id="editor-item-meta" class="editor-meta">The file's category, usage and tiers will appear here.</div>
+   <div class="editor-fields">
+    <label>Nominal<input id="edit-nominal" type="number" min="0" max="1000000" step="1"></label>
+    <label>Minimum<input id="edit-min" type="number" min="0" max="1000000" step="1"></label>
+    <label>Lifetime (seconds)<input id="edit-lifetime" type="number" min="0" max="2147483647" step="1"></label>
+    <label>Restock (seconds)<input id="edit-restock" type="number" min="0" max="2147483647" step="1"></label>
+    <label>Quantity minimum (-1 = unset)<input id="edit-quantmin" type="number" min="-1" max="100" step="1"></label>
+    <label>Quantity maximum (-1 = unset)<input id="edit-quantmax" type="number" min="-1" max="100" step="1"></label>
+    <label>Cost<input id="edit-cost" type="number" min="0" max="2147483647" step="1"></label>
+   </div>
+   <div id="editor-feedback" class="feedback" role="status" aria-live="polite">Choose an item to edit.</div>
+   <div class="toolbar editor-actions"><button class="primary" id="save-item">Save item changes</button><button class="secondary" id="undo-item">Undo</button><button class="secondary" id="redo-item">Redo</button><button class="secondary" id="original-item">Reset file to imported version</button></div>
+  </div>
+ </div></div>
+</section>
+<section class="view hidden" id="view-changes">
+ <div class="page-heading compact"><div class="eyebrow">QUALITY CONTROL / CHANGE REVIEW</div><h1>Know exactly what changed.</h1><p>Compare the currently edited configuration with the originally imported files before downloading anything.</p></div>
+ <div class="toolbar"><label class="change-select-label">Select file <select id="changes-file"><option value="">No files imported</option></select></label><button class="secondary" id="changes-undo">Undo last edit</button><button class="secondary" id="changes-redo">Redo edit</button><button class="secondary" id="changes-export">Export changed ZIP</button></div>
+ <div class="panel table-panel"><div class="panel-title"><h2>Change details</h2><span id="changes-count">No changes</span></div><div id="change-list" class="change-list"><div class="empty">Import and edit a configuration to review differences here.</div></div></div>
+</section>
 <section class="view hidden" id="view-validation">
  <div class="page-heading compact"><div class="eyebrow">QUALITY CONTROL / VALIDATION</div><h1>Check before export.</h1><p>Syntax and structural checks are available now. Full DayZ classname compatibility checking is planned for a later release.</p></div>
  <div class="toolbar"><button class="primary" id="run-validation">Run validation</button></div>
