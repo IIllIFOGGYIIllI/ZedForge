@@ -61,3 +61,5 @@
 .studio-exclusions textarea{width:100%;min-height:62px;resize:vertical;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:12px;border-radius:9px;font:inherit;font-size:12px}
 .studio-exclusions p{font-size:11px;color:var(--muted);margin:0 0 6px}
 .editor-field-hint{display:block;font-size:10px;color:var(--muted);font-weight:400;line-height:1.45;min-height:27px}
+
+.muted-link[href]:hover{color:var(--accent);background:var(--surface2);border-radius:7px}
