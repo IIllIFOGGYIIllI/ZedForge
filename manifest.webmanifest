@@ -1,0 +1,18 @@
+{
+  "name": "ZedForge — DayZ Console Toolkit",
+  "short_name": "ZedForge",
+  "description": "DayZ console server configuration editor",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1110",
+  "theme_color": "#101817",
+  "icons": [
+    {
+      "src": "./assets/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
