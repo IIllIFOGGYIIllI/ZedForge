@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="./styles.css">
 <script src="./vendor/jszip.min.js" defer></script>
 <script src="./app.js" defer></script>
+<script src="./studios.js" defer></script>
 </head>
 <body data-theme="obsidian">
 <div class="shell">
@@ -22,19 +23,21 @@
   <button class="nav-link" data-view="files"><span>▣</span> File Manager</button>
   <button class="nav-link" data-view="booster"><span>⬡</span> Loot Booster</button>
   <button class="nav-link" data-view="editor"><span>✎</span> Item Editor</button>
+  <button class="nav-link" data-view="spawnables"><span>⚙</span> Spawnable Studio</button>
+  <button class="nav-link" data-view="events"><span>◎</span> Events Studio</button>
   <button class="nav-link" data-view="changes"><span>⇄</span> Change Review</button>
   <button class="nav-link" data-view="validation"><span>◇</span> Validation</button>
  </nav>
  <div class="side-label second-label">COMING LATER</div>
- <div class="muted-link">✧ Vehicle Studio <span>SOON</span></div>
- <div class="muted-link">✧ Map Editor <span>SOON</span></div>
- <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.2.0</b></div><p>Local processing • No account needed</p></div>
+ <div class="muted-link">✧ Map Studio <span>SOON</span></div>
+ <div class="muted-link">✧ Loadout Studio <span>SOON</span></div>
+ <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.3.0</b></div><p>Local processing • No account needed</p></div>
 </aside>
 <div class="main-wrap">
 <header class="topbar"><button class="menu-button" id="mobile-menu" aria-label="Toggle menu">☰</button><div class="breadcrumb">ZEDFORGE <span>/</span> <strong id="page-crumb">Overview</strong></div><div class="header-right"><span class="local-badge"><i></i> LOCAL WORKSPACE</span><select id="theme" aria-label="Interface theme"><option value="obsidian">Obsidian</option><option value="tactical">Tactical Olive</option><option value="midnight">Midnight Blue</option><option value="arctic">Arctic Light</option></select></div></header>
 <main>
 <section class="view" id="view-dashboard">
- <div class="page-heading"><div class="eyebrow">CONSOLE SERVER TOOLKIT / ALPHA 02</div><h1>Forge your survival.</h1><p>Import your DayZ server configuration, fine-tune your loot economy, and export only what changed. Your files stay on your device.</p></div>
+ <div class="page-heading"><div class="eyebrow">CONSOLE SERVER TOOLKIT / ALPHA 03</div><h1>Forge your survival.</h1><p>Import your DayZ server configuration, fine-tune your loot economy, and export only what changed. Your files stay on your device.</p></div>
  <div class="stats"><article class="stat"><span>Imported files</span><strong id="stat-files">0</strong><small>XML & JSON</small></article><article class="stat"><span>Economy items</span><strong id="stat-items">0</strong><small>Indexed classnames</small></article><article class="stat"><span>Modified files</span><strong id="stat-changed">0</strong><small>Ready for export</small></article></div>
  <div class="two-col">
   <article class="panel upload-panel" id="dropzone" tabindex="0" role="button" aria-label="Import server files"><div class="upload-icon">⇧</div><h2>Import server configuration</h2><p>Drop XML, JSON, or a ZIP archive here. Existing files are never overwritten on your computer.</p><button class="primary" id="choose-files">Choose files</button><small>Multi-file import supported • Max 40 MB per archive</small></article>
@@ -59,6 +62,7 @@
    <label>Modify<select id="field-mode"><option value="both">Nominal and minimum</option><option value="nominal">Nominal only</option><option value="min">Minimum only</option></select></label>
   </div>
   <div class="booster-options"><label><input id="include-zero" type="checkbox"> Include zero-population items (exact mode)</label><label><input id="selected-only" type="checkbox"> Modify selected items only</label></div>
+  <div class="studio-exclusions"><label for="boost-exclusions">Exclude classnames from this boost</label><textarea id="boost-exclusions" rows="2" placeholder="One classname per line, or comma-separated (e.g. M4A1, ACOGOptic)"></textarea><p>Excluded entries remain untouched even during a category-wide or selected-items boost. Case-insensitive matching.</p></div>
   <div class="toolbar"><button class="primary" id="preview-boost">Preview boost</button><button class="secondary" id="reset-economy">Restore original file</button><button class="secondary" id="download-economy">Download selected XML</button></div>
   <div id="boost-feedback" class="feedback" role="status" aria-live="polite">Import a types.xml file to begin. Changes are always previewed before they are applied.</div>
  </div>
@@ -77,18 +81,74 @@
    <div class="section-eyebrow">SELECTED CLASSNAME</div><h2 id="editor-item-name">Select an item</h2>
    <div id="editor-item-meta" class="editor-meta">The file's category, usage and tiers will appear here.</div>
    <div class="editor-fields">
-    <label>Nominal<input id="edit-nominal" type="number" min="0" max="1000000" step="1"></label>
-    <label>Minimum<input id="edit-min" type="number" min="0" max="1000000" step="1"></label>
-    <label>Lifetime (seconds)<input id="edit-lifetime" type="number" min="0" max="2147483647" step="1"></label>
-    <label>Restock (seconds)<input id="edit-restock" type="number" min="0" max="2147483647" step="1"></label>
-    <label>Quantity minimum (-1 = unset)<input id="edit-quantmin" type="number" min="-1" max="100" step="1"></label>
-    <label>Quantity maximum (-1 = unset)<input id="edit-quantmax" type="number" min="-1" max="100" step="1"></label>
-    <label>Cost<input id="edit-cost" type="number" min="0" max="2147483647" step="1"></label>
+    <label>Nominal<small class="editor-field-hint">Number of items the economy aims to maintain in the world.</small><input id="edit-nominal" type="number" min="0" max="1000000" step="1"></label>
+    <label>Minimum<small class="editor-field-hint">Population threshold before new loot begins spawning.</small><input id="edit-min" type="number" min="0" max="1000000" step="1"></label>
+    <label>Lifetime (seconds)<small class="editor-field-hint">Time an untouched item remains before cleanup.</small><input id="edit-lifetime" type="number" min="0" max="2147483647" step="1"></label>
+    <label>Restock (seconds)<small class="editor-field-hint">Delay between replenishment attempts.</small><input id="edit-restock" type="number" min="0" max="2147483647" step="1"></label>
+    <label>Quantity minimum (-1 = unset)<small class="editor-field-hint">Minimum fill percentage when the item spawns. -1 leaves the default.</small><input id="edit-quantmin" type="number" min="-1" max="100" step="1"></label>
+    <label>Quantity maximum (-1 = unset)<small class="editor-field-hint">Maximum fill percentage when the item spawns. -1 leaves the default.</small><input id="edit-quantmax" type="number" min="-1" max="100" step="1"></label>
+    <label>Cost<small class="editor-field-hint">Central economy priority weight; usually left at the original value.</small><input id="edit-cost" type="number" min="0" max="2147483647" step="1"></label>
    </div>
    <div id="editor-feedback" class="feedback" role="status" aria-live="polite">Choose an item to edit.</div>
    <div class="toolbar editor-actions"><button class="primary" id="save-item">Save item changes</button><button class="secondary" id="undo-item">Undo</button><button class="secondary" id="redo-item">Redo</button><button class="secondary" id="original-item">Reset file to imported version</button></div>
   </div>
  </div></div>
+</section>
+<section class="view hidden" id="view-spawnables">
+ <div class="page-heading compact"><div class="eyebrow">SPAWN CONFIGURATION / ATTACHMENTS & CARGO</div><h1>Spawnable Studio.</h1><p>Configure how equipped items and container contents spawn. Changes are applied to your uploaded cfgspawnabletypes.xml without recreating unrelated XML elements.</p></div>
+ <div class="studio-heading-info">
+  <div class="notice"><strong>How it works:</strong> Group chance determines whether the attachments/cargo group is evaluated; individual item chance controls an item within the group. Damage 0.0–0.0 means pristine. This editor does not change population values in types.xml.</div>
+ </div>
+ <div class="panel">
+  <div class="studio-layout">
+   <div class="studio-browser">
+    <label class="field-label" for="spawnable-file">Spawnable configuration</label>
+    <select id="spawnable-file"><option value="">Import cfgspawnabletypes.xml</option></select>
+    <label class="field-label" for="spawnable-search">Find classname</label>
+    <input id="spawnable-search" type="search" placeholder="M4A1, Infected, Car…">
+    <select id="spawnable-item" size="14" aria-label="Select spawnable classname"></select>
+    <div id="spawnable-total" class="studio-count">No file loaded</div>
+   </div>
+   <div class="studio-detail">
+    <div class="section-eyebrow">SPAWNABLE CLASSNAME</div><h2 id="spawnable-name">Select an item</h2>
+    <div id="spawnable-info" class="studio-caption">Upload a cfgspawnabletypes.xml to edit attachments, cargo and spawn condition.</div>
+    <div id="spawnable-fields" class="studio-fields"><div class="empty">Import a spawnable configuration file first.</div></div>
+    <div id="spawnable-feedback" class="feedback" role="status" aria-live="polite">Your source file remains unchanged until you save.</div>
+    <div class="toolbar"><button class="primary" id="spawnable-save">Save changes</button><button class="secondary" id="spawnable-undo">Undo</button><button class="secondary" id="spawnable-redo">Redo</button><button class="secondary" id="spawnable-download">Download XML</button></div>
+   </div>
+  </div>
+ </div>
+ <div class="panel studio-bulk">
+  <div class="section-eyebrow">SAFE BULK OPERATIONS</div><h2>Spawn conditions</h2><p>Changes require confirmation, preserve unrelated fields, and can be undone.</p>
+  <div class="toolbar"><button class="secondary" id="spawnable-pristine">Make all entries pristine</button><button class="secondary" id="spawnable-group-full">Set attachment/cargo group chances to 100%</button></div>
+  <p class="studio-hint">Pristine affects damage values only. Group chances do not guarantee which individual attachment is selected or whether a cargo item fits.</p>
+ </div>
+</section>
+<section class="view hidden" id="view-events">
+ <div class="page-heading compact"><div class="eyebrow">DYNAMIC ECONOMY / EVENTS.XML</div><h1>Events Studio.</h1><p>Adjust vehicle spawns, helicopter crashes, animal populations, infected events and other central economy events directly from the original events.xml.</p></div>
+ <div class="notice"><strong>Vehicle spawn reminder:</strong> Raising an event's population doesn't create new spawn locations. Fixed spawn coordinates are in cfgeventspawns.xml, and attachments are configured separately.</div>
+ <div class="panel">
+  <div class="studio-layout">
+   <div class="studio-browser">
+    <label class="field-label" for="events-file">Event configuration</label><select id="events-file"><option value="">Import events.xml</option></select>
+    <label class="field-label" for="events-filter">Event type</label><select id="events-filter"><option value="all">All events</option><option value="vehicle">Vehicles</option><option value="infected">Infected</option><option value="animal">Animals</option><option value="crash">Crashes & static events</option><option value="other">Other</option></select>
+    <label class="field-label" for="events-search">Search event</label><input id="events-search" type="search" placeholder="Vehicle, Animal, Static…">
+    <select id="events-item" size="14" aria-label="Select dynamic event"></select>
+    <div id="events-total" class="studio-count">No file loaded</div>
+   </div>
+   <div class="studio-detail">
+    <div class="section-eyebrow">SELECTED DYNAMIC EVENT</div><h2 id="events-name">Select an event</h2><div id="events-info" class="studio-caption">Upload events.xml to begin.</div>
+    <div id="events-fields" class="studio-fields"><div class="empty">Import events.xml first.</div></div>
+    <div id="events-feedback" class="feedback" role="status" aria-live="polite">Changes require saving and can be undone.</div>
+    <div class="toolbar"><button class="primary" id="events-save">Save event</button><button class="secondary" id="events-undo">Undo</button><button class="secondary" id="events-redo">Redo</button><button class="secondary" id="events-download">Download XML</button></div>
+   </div>
+  </div>
+ </div>
+ <div class="panel studio-bulk">
+  <div class="section-eyebrow">VEHICLE POPULATIONS</div><h2>Bulk vehicle event boost</h2><p>Multiplies nominal, minimum, maximum and existing child min/max values for events beginning with Vehicle. Other event categories remain untouched.</p>
+  <div class="toolbar studio-boost"><label>Boost multiplier <input id="events-boost-factor" type="number" min="1" max="20" step="0.25" value="2"></label><button class="primary" id="events-boost">Preview & apply vehicle boost</button></div>
+  <p class="studio-hint">Applying a second multiplier compounds previous changes. The actual vehicle count is limited by spawn positions and the game's economy.</p>
+ </div>
 </section>
 <section class="view hidden" id="view-changes">
  <div class="page-heading compact"><div class="eyebrow">QUALITY CONTROL / CHANGE REVIEW</div><h1>Know exactly what changed.</h1><p>Compare the currently edited configuration with the originally imported files before downloading anything.</p></div>

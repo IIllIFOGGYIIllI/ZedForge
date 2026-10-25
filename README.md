@@ -1,72 +1,58 @@
 # ZedForge
 
-**Forge Your Survival Experience.** Unofficial DayZ console configuration toolkit for PlayStation and Xbox.
+**Forge Your Survival Experience.** A local-first DayZ PlayStation and Xbox console server configuration toolkit, installable as a web application.
 
-## v0.2.0 Alpha — working tools
+Website: https://IIllIFOGGYIIllI.github.io/ZedForge/
 
-The project is a **static website / installable PWA**. No Discord bot, Railway, account, or backend is required.
+## v0.3.0 Alpha
 
-- Import XML, JSON or ZIP archives directly in the browser.
-- All file contents remain on the user's device; **no server-side uploads**.
-- Detect and browse types.xml classnames, with search and best-effort category grouping.
-- Bulk loot boosts using **custom multipliers** or **exact nominal/min values**, optionally including disabled items.
-- Preview all planned boosts before applying; stop invalid min > nominal results.
-- **Individual item editor** for nominal, min, lifetime, restock, quantmin, quantmax and cost.
-- **Undo/redo and original-file recovery** (up to eight undo snapshots per file).
-- **IndexedDB workspace persistence** across browser refreshes when storage is available; displays storage status.
-- **Change Review** compares edited configuration against the original imported version.
-- XML and JSON syntax validation, duplicate classname reporting and basic numeric checks.
-- ZIP export of **modified files only** or full import, retaining original relative paths.
-- ZIP processing via vendored JSZip 3.10.2 so it can work **offline once installed**.
-- Four themes: Obsidian, Tactical Olive, Midnight Blue, Arctic Light.
-- Mobile-responsive interface, PWA shell, service worker, and browser installability.
+### Current tools
 
-## Open the live website
+- **File Manager:** Import XML/JSON/ZIP, inspect files, restore originals, download single XML files or only changed configurations as ZIPs.
+- **Loot Booster:** Search and filter `types.xml`, multiply populations or set exact values, select specific entries, exclude classnames, preview all affected entries, and undo changes.
+- **Individual Item Editor:** Edit existing nominal, min, lifetime, restock, quantmin, quantmax and cost values. Every field has an explanation.
+- **Spawnable Studio (new):** Import `cfgspawnabletypes.xml` and edit existing attachment group chances, individual candidate chances, cargo group/item chances, and damage min/max. Add pristine damage for a single item, or use deliberate bulk pristine / group-chance actions.
+- **Events Studio (new):** Import `events.xml` and edit event population and lifecycle fields plus existing child min/max and lootmin/lootmax. Search and filter vehicles, animals, infected and static events; optionally multiply vehicle event populations.
+- **Change Review & Validation:** Original-versus-edited comparisons, XML/JSON parse checks, duplicate and numeric checks, spawnable chance/damage validation, and event child/range checks.
+- **Workspace:** IndexedDB local storage when supported, undo/redo snapshots, four themes, offline PWA, locally bundled JSZip.
 
-https://IIllIFOGGYIIllI.github.io/ZedForge/
+### Import/export workflow
+
+1. Open the website, upload individual XML/JSON files or a ZIP. Multiple configurations can be imported together.
+2. Select the appropriate studio. Editors work against **the user's imported files**, not generic replacement templates.
+3. Review proposed changes. Use Undo, Change Review and Validation before exporting.
+4. Download the edited single file or choose **Export changed ZIP** to preserve the relative paths of only modified files.
+
+### Safety
+
+- This project is a public **alpha**, not a substitute for backing up your server before deployment.
+- Files are processed entirely on-device. They are not uploaded to a ZedForge server.
+- Reloads typically restore the workspace via IndexedDB, but private browsing, browser storage clearing, or quota limits can remove it. Export regularly.
+- The XML editors change existing targeted text in place and preserve unrelated comments, child ordering and formatting wherever supported.
+- An editor **does not add unsupported tags** automatically. The explicit Add pristine damage action is an exception.
+- The current category classification is best-effort. Verify selections, especially for boosted items.
+- Vehicle populations can be limited by `cfgeventspawns.xml` and the game's economy logic. This release does not generate spawn coordinates.
+- Validation does not prove every classname is supported by every DayZ map or game version.
+- Imported files should be UTF-8 XML/JSON, 8 MB per configuration file. ZIP imports: 40 MB compressed maximum and 60 MB relevant uncompressed payload.
+- No Nitrado integration or automated live server changes.
+- The application is unofficial and not affiliated with Bohemia Interactive, console manufacturers or Nitrado.
 
 ## Local development
 
+From this repository:
+
 ```sh
 python -m http.server 8000
-# open http://localhost:8000
 node tests/run-tests.mjs
+node tests/studios-tests.mjs
 ```
 
-No build pipeline or npm dependencies are needed for runtime or unit tests.
+Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
-## How to use
+## Next milestones
 
-1. Open File Manager / Overview; import a `types.xml`, JSON file, or configuration ZIP.
-2. In Loot Booster, choose your `types.xml`, multiplier vs exact target, filter and field scope.
-3. Preview proposed values and confirm only after checking them. A second boost compounds the already-edited file.
-4. In Item Editor, search for a classname, edit the numeric fields and save.
-5. In Change Review, inspect differences and undo / redo if needed.
-6. Use Validation, then export changed files as a ZIP or export an individual XML.
+More advanced `cfgeventspawns.xml` coordinates, map-assisted editing, vehicle attachment presets, multi-server profiles, and versioned classname reference data.
 
-## Safety and restrictions
+## Dependencies and licensing
 
-- A local browser workspace can still be wiped by clearing site data, private browsing or browser storage quotas. **Export important edits regularly.**
-- Unrecognised category filters are best-effort. Always review proposed change lists.
-- `quantmin` / `quantmax` allow -1; normal nominal/min/seconds values require nonnegative integers.
-- Individual edits change only **existing** numeric fields; ZedForge does not invent unsupported XML tags.
-- Numeric edits preserve all unrelated XML and original whitespace/comments wherever matching is unambiguous.
-- XML must be well-formed before editing/export. Validation is **not** a game-engine or classname compatibility guarantee.
-- DayZ population values can affect performance and economy balance; large boosts are not automatically safe for every server.
-- ZIP input: max 40 MB compressed, 60 MB uncompressed relevant entries, 8 MB per XML/JSON file, max 500 relevant configuration entries.
-- XML is currently read and written as UTF-8 text; unsupported encodings are not preserved.
-- Imported configurations are **not** pushed to Nitrado, and ZedForge cannot restart or reconfigure live servers.
-- App is not affiliated with Bohemia Interactive, Nitrado or console manufacturers.
-
-## Licensing
-
-The vendored JSZip library is from the official [JSZip repository](https://github.com/Stuk/jszip) and is used under its MIT license. See `vendor/JSZIP-LICENSE.md`.
-
-## Roadmap
-
-- More DayZ XML editors (attachments, events, vehicle spawns).
-- Accurate versioned classname/reference datasets with map support.
-- More granular backups, server profiles, profiles export/import, diff filtering and edit history.
-- Map editing, compatible desktop packaging and optional server integration.
-
-This repository remains under development; test exports before using them on live servers.
+Uses local [JSZip](https://github.com/Stuk/jszip) 3.10.2 under the MIT license; see `vendor/JSZIP-LICENSE.md`.

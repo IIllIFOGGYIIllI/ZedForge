@@ -133,7 +133,8 @@ function makeBoost(){const file=getEconomy();if(!file)throw new Error('Import ty
  const items=scanTypes(file),visible=filteredItems(items),input=Number($('boost-value').value),op=$('boost-mode').value,mode=$('field-mode').value,includeZero=$('include-zero').checked,selectedOnly=$('selected-only').checked;
  if(!Number.isFinite(input)||input<0||input>1000000||(op==='multiply'&&input>1000)||(op==='exact'&&!Number.isInteger(input)))throw new Error('Enter a valid '+(op==='exact'?'whole number (0–1,000,000)':'multiplier (0–1000)'));
  if(selectedOnly&&!state.selectedItems.size)throw new Error('Select one or more items first');
- const candidates=selectedOnly?items.filter(i=>state.selectedItems.has(i.index)):visible,changes=[];
+ const excluded=new Set($('boost-exclusions').value.split(/[\n,;]+/).map(s=>s.trim().toLowerCase()).filter(Boolean));
+ const candidates=(selectedOnly?items.filter(i=>state.selectedItems.has(i.index)):visible).filter(item=>!excluded.has(item.name.toLowerCase())),changes=[];
  let skipped=0;
  for(const item of candidates){if(item.nominal===null||item.min===null){skipped++;continue}
  const newN=mode==='min'?item.nominal:calculateBoost(item.nominal,input,op,includeZero);
