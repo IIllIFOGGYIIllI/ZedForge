@@ -1,40 +1,64 @@
 # ZedForge Nasdara Map Lab (experimental)
 
-A standalone, browser-based prototype for **calibrated Nasdara satellite imagery**. This is not a replacement for the World War Z website map, and no World War Z repository files are modified.
+A standalone, browser-based prototype for **calibrated Nasdara satellite imagery**. The World War Z website is not modified or coupled to this project.
 
-Open: https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/
+**Preview:** https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/
 
-## What works
+## Current features — Map Lab update (v0.3.2)
 
-- Load **your own Nasdara satellite image** (PNG/JPG/WebP) locally, without transmitting it.
-- 16,384 m × 16,384 m world projection, north-up, derived from documented terrain calibration.
-- Mouse wheel zoom anchored to cursor, drag to pan, coordinate readout.
-- Lookup of precise X/Z coordinates, shift-click to create markers, download marker CSV.
-- Optional `cfgeventspawns.xml` overlay, event filters and optional road GeoJSON overlay using world coordinates.
-- Grid and layer toggles, responsive interface, canvas-only rendering.
-- No map images, downloaded external maps, or community providers' tiles are bundled.
+- Load a locally supplied Nasdara satellite image (PNG, JPG, or WebP).
+- Use 16,384 × 16,384 metre world calibration, north-up.
+- Smooth pan and anchored zoom using the actual game X/Z coordinates.
+- **Optionally remember the satellite image in browser IndexedDB**, without uploading it to any server. Check/uncheck **Remember image locally**, and use **Forget saved image** to remove saved imagery.
+- Restore your map position, markers, road GeoJSON and event-spawn overlays after refreshing when browser storage permits.
+- Drag and drop satellite imagery onto the map.
+- Inspect native satellite resolution in metres per pixel; a 4,096px Nasdara image is **4 m/pixel** and will not magically show individual small objects at extreme zoom.
+- Add, label, select, edit and delete coordinate markers; export CSV of labelled markers.
+- Optional road GeoJSON overlays in raw **[X,Z] game coordinates** and an optional `cfgeventspawns.xml` layer with event filtering.
+- Grid, layer toggles, double-click zoom, shift-click markers, and keyboard-safe coordinate entry.
+- Source files are handled locally; no third-party map websites are scraped.
+
+## Start testing
+
+Open the [Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/).
+
+1. Upload an image you are permitted to use. For a privately evaluated source, review the Nasdara map project linked inside the Map Lab.
+2. Zoom and pan, then use the X/Z inputs to locate a known game position.
+3. If desired, import your own road GeoJSON or `cfgeventspawns.xml` and filter spawn points.
+4. Shift-click to place markers or type X/Z values and use Add Marker. Select a marker from the list to edit its coordinates or label.
+5. Export labelled marker CSV. This is not a game-ready spawn XML.
+
+Your local storage might not support an image as large as the source file, or site data might be cleared later. **Always export critical coordinate work.**
 
 ## Calibration
 
-Nasdara world extent: 0–16,384 m on both X and Z axes. North-up satellite image coordinates:
+Nasdara world extent: 0–16,384 m on both axes. A correctly calibrated, north-up image maps to world positions as:
 
 ```
-image_x = x / 16384 * image_width
-image_y = (1 - z / 16384) * image_height
+image_x = world_x / 16384 * image_width
+image_y = (1 - world_z / 16384) * image_height
 ```
 
-A 4,096 × 4,096 source would represent four metres per pixel. The viewer can display other image sizes, but **image bounds and orientation must already be aligned to Nasdara's world extent**.
+An image that has been cropped, rotated, stretched, or padded with borders will not automatically align. The Map Lab does not currently offer image calibration controls.
 
-## Important limitations
+## Not yet implemented
 
-- This prototype does **not** source map imagery or road geometry and cannot magically improve a poor-quality satellite source. Use only imagery you own or are permitted to process.
-- It accepts road layers in **raw game-coordinate GeoJSON** (coordinate pair is `[X,Z]`). It does not interpret WGS84 longitude/latitude.
-- It does not export `cfgeventspawns.xml` edits yet. Marker CSV is for review, not a drop-in server file.
-- Some image browsers can run out of graphics memory when decoding very large source images.
-- Marker state is session-only; export CSV before leaving.
-- Loading a local image does not establish permission to redistribute it in a public application.
-- Do not copy third-party map website tile resources or publish extracted DayZ textures without checking licensing/permissions.
+- Server-ready edits to `cfgeventspawns.xml` (the overlay is read-only).
+- Higher-resolution satellite tile pyramid / streamed source images.
+- Verified building footprint and fully licensed road layers.
+- Click-to-place polygons and circles.
+- Official publishing of proprietary DayZ-derived assets. Loading locally does **not** grant redistribution permission.
+- Integration into the WWZ site (explicitly excluded until requested).
 
-## Next steps
+## Automated tests
 
-Test on an image extracted or obtained with the necessary rights. If the source aligns, add a licensed road dataset, imagery tiling for deep zoom, and ultimately an official, consented integration into ZedForge and World War Z. Nothing should be merged into the WWZ site until authorised.
+```sh
+node map-lab/projection.test.cjs
+node map-lab/interface.test.cjs
+```
+
+The projection test covers coordinate transforms, image calibration, anchored zoom and boundaries. The interface test catches missing IDs, missing assets, unsupported external script dependencies and markup wiring.
+
+## Asset licensing
+
+No proprietary imagery is included. The linked [DayZ Vehicle Map project](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map) independently publishes reference Nasdara imagery and documents a terrain extraction method; independently verify your right to use or redistribute any third-party source. The Map Lab's local file workflow avoids copying those images into ZedForge or World War Z.

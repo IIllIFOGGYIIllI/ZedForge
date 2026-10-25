@@ -5,8 +5,116 @@
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
-    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:true,showMarkers:true};
-  let toastId=0,frame=0;
+    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:true,showMarkers:true,imageFile:null,selectedMarkerIndex:null};
+  let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
+  const cache=window.ZedForgeMapStorage;
+  function setCacheStatus(label){$('local-storage-status').textContent=label}
+  function queueCache(key,value){
+    if(!cache)return Promise.reject(new Error('Local storage is unavailable'));
+    cacheChain=cacheChain.catch(()=>{}).then(()=>cache.write(key,value));
+    return cacheChain
+  }
+  function saveView(){
+    clearTimeout(saveTimer);saveTimer=setTimeout(async()=>{
+      const session={
+        camera:state.camera,markers:state.markers,selected:state.selected,
+        flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers},
+        filter:$('event-filter').value
+      };
+      try{await queueCache('session',session);setCacheStatus('✓ Map settings saved locally')}
+      catch(err){setCacheStatus('Local save unavailable');notify('Local map save failed; export your markers: '+err.message)}
+    },750)
+  }
+  function renderMarkerList(){
+    const list=$('marker-list');list.replaceChildren();$('marker-count').textContent=state.markers.length+' marker'+(state.markers.length===1?'':'s')+' • saved locally when available';
+    if(!state.markers.length){const e=document.createElement('div');e.className='data-state';e.textContent='No markers placed yet.';list.append(e);return}
+    for(let i=0;i<state.markers.length;i++){
+      const m=state.markers[i],line=document.createElement('div');line.className='marker-line';if(i===state.selectedMarkerIndex)line.classList.add('selected');
+      const open=document.createElement('button');open.className='marker-open';open.type='button';const title=document.createElement('span');title.className='marker-label';title.textContent=(i+1)+'. '+(m.label||'Map marker');
+      const coords=document.createElement('span');coords.className='marker-coords';coords.textContent='X '+m.x.toFixed(2)+' • Z '+m.z.toFixed(2);
+      open.append(title,coords);open.onclick=()=>{state.selectedMarkerIndex=i;$('marker-label').value=m.label||'';$('update-marker').disabled=false;moveTo(m);renderMarkerList()};
+      const remove=document.createElement('button');remove.className='marker-delete';remove.type='button';remove.textContent='×';remove.setAttribute('aria-label','Remove marker '+(i+1));remove.onclick=()=>{
+        if(!confirm('Remove '+(m.label||'marker '+(i+1))+'?'))return;
+        state.markers.splice(i,1);if(state.selectedMarkerIndex===i)state.selectedMarkerIndex=null;else if(state.selectedMarkerIndex>i)state.selectedMarkerIndex--; $('update-marker').disabled=state.selectedMarkerIndex===null;interacted=true;renderMarkerList();saveView();schedule()
+      };
+      line.append(open,remove);list.append(line)
+    }
+  }
+  function sourceQuality(image){
+    const meters=EXTENT/image.width;
+    const label=meters.toFixed(2)+' metres/source pixel';
+    $('source-quality').textContent=image.width+' × '+image.height+' source pixels • '+label+
+      (meters>2?' • Native imagery limits close-zoom sharpness; higher resolution or vector structures needed for iZurvive-style detail.':' • Suitable source resolution for closer zoom.');
+  }
+  function setEventFilter(names,chosen='all'){
+    const select=$('event-filter');select.replaceChildren(new Option('All events','all'));
+    for(const name of names)select.add(new Option(name,name));
+    if(names.includes(chosen))select.value=chosen;
+  }
+  async function cacheLayer(key,value,label){
+    try{await queueCache(key,value);setCacheStatus('✓ '+label+' saved locally')}
+    catch(e){setCacheStatus('⚠ Local save failed');notify('Could not persist '+label+': '+e.message)}
+  }
+  async function decodeImage(blob){
+    if(typeof createImageBitmap==='function')return createImageBitmap(blob);
+    const url=URL.createObjectURL(blob);
+    try{return await new Promise((resolve,reject)=>{
+      const image=new Image();
+      image.onload=()=>resolve(image);
+      image.onerror=()=>reject(new Error('Unable to decode satellite image'));
+      image.src=url;
+    })}finally{setTimeout(()=>URL.revokeObjectURL(url),30000)}
+  }
+  async function showSatellite(file,{restored=false}={}){
+    maxSize(file,100*1024*1024);
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Only PNG, JPG and WebP are supported');
+    const image=await decodeImage(file);
+    if(image.width*image.height>90000000){image.close?.();throw Error('Image exceeds 90 megapixels; choose a smaller source or tiled imagery')}
+    if(!restored)interacted=true;
+    if(state.image?.close)state.image.close();
+    state.image=image;state.imageFile=file;
+    const filename=file.name||'Locally cached satellite image';
+    $('image-status').textContent=filename+' • '+image.width+' × '+image.height+' pixels • '+(file.size/1024/1024).toFixed(1)+' MB';
+    $('map-credit').textContent='Local satellite imagery • '+filename;
+    $('empty-overlay').classList.add('hidden');
+    sourceQuality(image);schedule();
+    if(!restored){
+      if($('remember-image').checked){setCacheStatus('Saving satellite locally…');await cacheLayer('image',{blob:file,name:filename},'image')}
+      else setCacheStatus('Image loaded for this tab only');
+      if(image.width!==image.height)notify('Image is not square; verify its world-coordinate calibration');
+    }
+  }
+  async function restoreCached(){
+    if(!cache){setCacheStatus('Storage unsupported; export before leaving');return}
+    try{
+      const [session,roads,events,image]=await Promise.all([cache.read('session'),cache.read('roads'),cache.read('events'),cache.read('image')]);
+      if(interacted)return;
+      if(session){
+        const v=session.camera;
+        if(v&&Number.isFinite(v.x)&&Number.isFinite(v.z)&&Number.isFinite(v.zoom)&&v.zoom>0){
+          state.camera=P.view(v.x,v.z,P.clamp(v.zoom,.75,64))
+        }
+        state.markers=Array.isArray(session.markers)?session.markers.filter(m=>m&&P.validateWorld(m.x,m.z)).slice(0,5000).map(m=>({x:m.x,z:m.z,label:typeof m.label==='string'?m.label.slice(0,60):''})):[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;
+        state.selected=session.selected&&P.validateWorld(session.selected.x,session.selected.z)?session.selected:null;
+        for(const [id,key]of [['show-roads','roads'],['show-spawns','spawns'],['show-grid','grid'],['show-markers','markers']]){
+          if(typeof session.flags?.[key]==='boolean'){$(id).checked=session.flags[key];state['show'+key[0].toUpperCase()+key.slice(1)]=session.flags[key]}
+        }
+      }
+      if(roads&&Array.isArray(roads.lines)){state.roads=roads.lines;$('roads-status').textContent=roads.lines.length.toLocaleString()+' paths restored • '+(roads.name||'cached roads')}
+      if(events&&Array.isArray(events.entries)&&Array.isArray(events.names)){
+        state.eventSpawns=events.entries;state.eventNames=events.names;
+        setEventFilter(events.names,session?.filter);
+        $('events-status').textContent=events.entries.length+' event positions restored'
+      }
+      if(state.selected){coordsInSidebar(state.selected);$('selected-readout').textContent='Selected X '+fmt(state.selected.x)+' • Z '+fmt(state.selected.z)}
+      renderMarkerList();updateZoom();schedule();
+      if(image?.blob instanceof Blob&&!interacted){
+        const blob=image.blob;
+        try{await showSatellite(blob,{restored:true});setCacheStatus('✓ Satellite and settings restored locally')}
+        catch(err){setCacheStatus('Satellite cache unreadable');notify('Saved image could not be restored: '+err.message)}
+      }else setCacheStatus('✓ Workspace loaded locally');
+    }catch(err){setCacheStatus('Local browser storage unavailable');notify('Map Lab storage unavailable: '+err.message)}
+  }
   function notify(text){const node=$('toast');node.textContent=text;node.style.display='block';clearTimeout(toastId);toastId=setTimeout(()=>node.style.display='none',4200)}
   function schedule(){if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw()})}
   function resize(){const rect=region.getBoundingClientRect();state.width=rect.width;state.height=rect.height;state.dpr=Math.min(2,window.devicePixelRatio||1);
@@ -72,7 +180,7 @@
   function drawMarkers(){
     if(!state.showMarkers)return;
     ctx.save();ctx.font='11px system-ui,sans-serif';ctx.textBaseline='middle';
-    state.markers.forEach((m,i)=>{pin(m.x,m.z,'#8ef3c7',5);const p=toS(m.x,m.z);if(state.camera.zoom>1.5) {ctx.fillStyle='#ffffff';ctx.fillText(String(i+1),p.x+10,p.y)}});
+    state.markers.forEach((m,i)=>{pin(m.x,m.z,'#8ef3c7',5);const p=toS(m.x,m.z);if(state.camera.zoom>1.5) {ctx.fillStyle='#ffffff';ctx.fillText(state.camera.zoom>4&&m.label?m.label:String(i+1),p.x+10,p.y)}});
     ctx.restore()
   }
   function drawSelection(){
@@ -85,14 +193,14 @@
     ctx.fillStyle='#0d1e26';ctx.fillRect(0,0,state.width,state.height);
     drawImage();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawEvents();drawMarkers();drawSelection()
   }
-  function setCamera(next){state.camera=next;updateZoom();schedule()}
+  function setCamera(next){state.camera=next;updateZoom();schedule();saveView()}
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
     state.selected={x:p.x,z:p.z};coordsInSidebar(p);setCamera(P.view(p.x,p.z,Math.max(2.5,state.camera.zoom)));
     $('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z)
   }
   function mouseEvent(e){
     if(e.button!==0)return;
-    state.pointerDown={point:pointerOffset(e),camera:{...state.camera},shift:e.shiftKey};
+    state.pointerDown={point:pointerOffset(e),clientX:e.clientX,clientY:e.clientY,camera:{...state.camera},shift:e.shiftKey};
     state.drag={x:e.clientX,y:e.clientY,moved:false};
     canvas.setPointerCapture(e.pointerId);
     region.classList.add('dragging')
@@ -102,29 +210,32 @@
     const current=worldFromPointer(e);state.cursor=current;updateReadout(current);
     if(!state.drag)return;
     const dx=e.clientX-state.drag.x,dy=e.clientY-state.drag.y;
-    if(Math.abs(e.clientX-state.pointerDown.point.x-canvas.getBoundingClientRect().left)>4||Math.abs(e.clientY-state.pointerDown.point.y-canvas.getBoundingClientRect().top)>4)state.drag.moved=true;
+    if(Math.hypot(e.clientX-state.pointerDown.clientX,e.clientY-state.pointerDown.clientY)>4)state.drag.moved=true;
     const scale=P.scale(state.pointerDown.camera,state.width,state.height);
-    setCamera(P.view(state.pointerDown.camera.x-dx/scale,state.pointerDown.camera.z+dy/scale,state.pointerDown.camera.zoom))
+    if(state.drag.moved)setCamera(P.view(state.pointerDown.camera.x-dx/scale,state.pointerDown.camera.z+dy/scale,state.pointerDown.camera.zoom))
   });
   function addMarker(p){
     if(!worldValid(p))return notify('Cannot add a marker outside the map');
-    state.markers.push({x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3))});$('marker-count').textContent=state.markers.length+' marker'+(state.markers.length===1?'':'s')+' (in this tab)';schedule();notify('Marker added at X '+fmt(p.x)+' / Z '+fmt(p.z))
+    state.markers.push({x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3)),label:$('marker-label').value.trim().slice(0,60)});state.selectedMarkerIndex=state.markers.length-1;$('update-marker').disabled=false;interacted=true;renderMarkerList();saveView();schedule();notify('Marker added at X '+fmt(p.x)+' / Z '+fmt(p.z))
   }
   canvas.addEventListener('pointerup',e=>{
     if(!state.drag)return;
     const wasDrag=state.drag.moved;
     state.drag=null;region.classList.remove('dragging');
-    if(!wasDrag){const p=worldFromPointer(e);if(worldValid(p)){state.selected=p;coordsInSidebar(p);$('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z);if(e.shiftKey)addMarker(p)}}
+    if(!wasDrag){const p=worldFromPointer(e);if(worldValid(p)){state.selected=p;coordsInSidebar(p);$('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z);if(e.shiftKey)addMarker(p);saveView()}}
     schedule()
   });
   canvas.addEventListener('pointercancel',()=>{state.drag=null;region.classList.remove('dragging')});
   canvas.addEventListener('wheel',e=>{e.preventDefault();const p=pointerOffset(e);const multiplier=e.deltaY<0?1.17:1/1.17;setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*multiplier,state.width,state.height))},{passive:false});
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  canvas.addEventListener('dblclick',e=>{
+    e.preventDefault();const p=pointerOffset(e);setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*(e.shiftKey?.7:1.7),state.width,state.height))
+  });
   $('zoom-in').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom*1.6,state.width,state.height));
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
   for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers']]){
-    $(checkbox).onchange=e=>{state[key]=e.target.checked;schedule()}
+    $(checkbox).onchange=e=>{state[key]=e.target.checked;schedule();saveView()}
   }
   function inputCoords(){
     const x=Number($('coord-x').value),z=Number($('coord-z').value);
@@ -132,29 +243,53 @@
   }
   $('go-coords').onclick=()=>{const p=inputCoords();if(!p)return notify('Enter valid X/Z coordinates within 0–16384');moveTo(p)};
   $('add-marker').onclick=()=>{const p=inputCoords();if(!p)return notify('Enter valid X/Z coordinates');addMarker(p)};
+  $('update-marker').onclick=()=>{
+    const p=inputCoords(),i=state.selectedMarkerIndex;
+    if(i===null||i<0||i>=state.markers.length)return notify('Select a saved marker from the list first');
+    if(!p)return notify('Enter valid X/Z coordinates');
+    state.markers[i]={x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3)),label:$('marker-label').value.trim().slice(0,60)};
+    state.selected={x:p.x,z:p.z};interacted=true;
+    renderMarkerList();saveView();schedule();notify('Marker '+(i+1)+' updated')
+  };
   $('copy-coords').onclick=async()=>{const p=inputCoords();if(!p)return notify('Enter valid X/Z coordinates');try{await navigator.clipboard.writeText(fmt(p.x)+' '+fmt(p.z));notify('Coordinates copied')}catch{notify('Clipboard unavailable; select X/Z from the coordinate fields')}};
-  $('clear-markers').onclick=()=>{if(!state.markers.length)return;if(!confirm('Clear '+state.markers.length+' local markers?'))return;state.markers=[];$('marker-count').textContent='0 markers (in this tab)';schedule()};
+  $('clear-markers').onclick=()=>{if(!state.markers.length)return;if(!confirm('Clear '+state.markers.length+' local markers?'))return;state.markers=[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;interacted=true;renderMarkerList();saveView();schedule()};
   $('export-markers').onclick=()=>{
     if(!state.markers.length)return notify('Add markers before exporting');
-    const output='index,x,z\n'+state.markers.map((m,i)=>[i+1,m.x,m.z].join(',')).join('\n')+'\n';
+    const csv=s=>'"'+String(s??'').replaceAll('"','""')+'"';const output='index,label,x,z\n'+state.markers.map((m,i)=>[i+1,csv(m.label),m.x,m.z].join(',')).join('\n')+'\n';
     download(new Blob([output],{type:'text/csv;charset=utf-8'}),'ZedForge_Nasdara_Markers.csv')
   };
   function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
   function maxSize(file,limit){if(file.size>limit)throw Error('File too large (max '+(limit/1024/1024)+' MB)')}
   $('image-file').addEventListener('change',async e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
-    try{
-      maxSize(file,100*1024*1024);
-      if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Only PNG, JPG and WebP are supported');
-      const image=await createImageBitmap(file);
-      if(image.width<1000||image.height<1000)notify('This image may look blurry when zoomed; try a higher-resolution satellite render');
-      if(image.width!==image.height)notify('Image is not square. It will be aligned to the 16.384 km world extent; verify calibration');
-      if(state.image?.close)state.image.close();
-      state.image=image;
-      $('image-status').textContent=file.name+' • '+image.width+' × '+image.height+' pixels • '+(file.size/1024/1024).toFixed(1)+' MB';
-      $('map-credit').textContent='Local satellite imagery: '+file.name;
-      $('empty-overlay').classList.add('hidden');schedule();notify('Satellite image loaded locally');
-    }catch(err){notify('Image loading failed: '+err.message)}
+    try{await showSatellite(file);notify('Satellite image loaded locally')}
+    catch(err){notify('Image loading failed: '+err.message)}
+  });
+  $('remember-image').onchange=async e=>{
+    if(!cache)return setCacheStatus('Browser storage unavailable');
+    if(e.target.checked){
+      if(state.imageFile)await cacheLayer('image',{blob:state.imageFile,name:state.imageFile.name||'Local satellite image'},'image');
+      else setCacheStatus('Next loaded image will be saved locally');
+    }else{
+      try{await cache.remove('image');setCacheStatus('Image will not be remembered')}
+      catch(err){notify('Could not remove cached image: '+err.message)}
+    }
+  };
+  $('forget-image').onclick=async()=>{
+    if(!cache)return notify('Local storage unavailable');
+    try{await cache.remove('image');$('remember-image').checked=false;setCacheStatus('Saved imagery forgotten • current image still visible');notify('Cached satellite image cleared from this browser')}
+    catch(err){notify('Could not forget cached image: '+err.message)}
+  };
+  let droppedDepth=0;
+  region.addEventListener('dragenter',e=>{if(!e.dataTransfer?.types?.includes('Files'))return;e.preventDefault();droppedDepth++;region.classList.add('drop-active')});
+  region.addEventListener('dragover',e=>{if(!e.dataTransfer?.types?.includes('Files'))return;e.preventDefault();e.dataTransfer.dropEffect='copy'});
+  region.addEventListener('dragleave',()=>{droppedDepth--;if(droppedDepth<=0){droppedDepth=0;region.classList.remove('drop-active')}});
+  region.addEventListener('drop',async e=>{
+    e.preventDefault();droppedDepth=0;region.classList.remove('drop-active');
+    const file=[...(e.dataTransfer?.files||[])].find(f=>['image/png','image/jpeg','image/webp'].includes(f.type));
+    if(!file)return notify('Drop a PNG, JPG or WebP satellite image');
+    try{await showSatellite(file);notify('Satellite image loaded by drop')}
+    catch(err){notify('Image loading failed: '+err.message)}
   });
   function validateCoords(pair){return Array.isArray(pair)&&pair.length>=2&&Number.isFinite(pair[0])&&Number.isFinite(pair[1])&&P.validateWorld(pair[0],pair[1])}
   function extractRoads(geojson){
@@ -174,8 +309,9 @@
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
     try{maxSize(file,15*1024*1024);const roads=extractRoads(JSON.parse(await file.text()));
       if(!roads.length)throw Error('No LineString/MultiLineString world-coordinate paths found');
-      state.roads=roads;
+      state.roads=roads;interacted=true;
       $('roads-status').textContent=roads.length.toLocaleString()+' road paths • '+file.name;
+      void cacheLayer('roads',{lines:roads,name:file.name},'road layer');
       schedule();notify('Loaded '+roads.length+' road paths')
     }catch(err){notify('Road layer rejected: '+err.message)}
   });
@@ -199,15 +335,15 @@
   $('events-file').addEventListener('change',async e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
     try{maxSize(file,8*1024*1024);const parsed=parseEventSpawns(await file.text());
-      state.eventSpawns=parsed.entries;state.eventNames=parsed.names;
-      const filter=$('event-filter');filter.replaceChildren(new Option('All events','all'));
-      for(const name of parsed.names)filter.add(new Option(name,name));
+      state.eventSpawns=parsed.entries;state.eventNames=parsed.names;interacted=true;
+      setEventFilter(parsed.names);
+      void cacheLayer('events',{entries:parsed.entries,names:parsed.names,name:file.name},'event layer');
       $('events-status').textContent=parsed.entries.length+' positions from '+parsed.names.length+' events';
       schedule();notify('Imported '+parsed.entries.length+' event positions')
     }catch(err){notify('Event-spawn layer rejected: '+err.message)}
   });
-  $('event-filter').onchange=schedule;
+  $('event-filter').onchange=()=>{schedule();saveView()};
   window.addEventListener('resize',resize);
   if('ResizeObserver'in window)new ResizeObserver(resize).observe(region);
-  resize();updateZoom();
+  resize();updateZoom();renderMarkerList();void restoreCached();
 })();

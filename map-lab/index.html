@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c1214">
-<meta name="description" content="ZedForge Map Lab — a local-first Nasdara satellite map viewer and coordinate overlay prototype.">
+<meta name="description" content="ZedForge Map Lab — offline-capable calibrated Nasdara satellite viewer, marker manager and local storage.">
 <title>Nasdara Map Lab • ZedForge</title>
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 <script src="./projection.js" defer></script>
+<script src="./storage.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
@@ -25,6 +26,9 @@
   <label class="file-button" for="image-file"><span>▧</span> Load satellite image <small>PNG, JPG or WebP</small></label>
   <input id="image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
   <div class="data-state" id="image-status">No image loaded. Use imagery you have permission to use.</div>
+  <div id="source-quality" class="source-quality" role="status">Load a satellite image to inspect its native resolution.</div>
+  <label class="toggle" for="remember-image"><input id="remember-image" type="checkbox" checked> Remember image locally <span>private to this browser</span></label>
+  <div class="button-row storage-line"><button id="forget-image" class="secondary">Forget saved image</button><span id="local-storage-status" class="data-state">Checking local storage…</span></div>
   <p class="hint">Need a reference image? <a class="reference-link" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/maps/nasdara.png" target="_blank" rel="noopener noreferrer">View the independently published Nasdara PNG</a> (33 MB). Download it from its source, then load it locally here. Check permitted uses before redistribution.</p>
   <label class="file-button secondary" for="roads-file"><span>⌁</span> Add road overlay <small>GeoJSON • optional</small></label>
   <input id="roads-file" type="file" accept=".json,.geojson,application/json" hidden>
@@ -47,21 +51,25 @@
   <p class="hint">X increases east, Z increases north. Use metres, not image pixels.</p>
   <div class="coords"><label>X <input id="coord-x" type="number" min="0" max="16384" step="0.001" placeholder="X" value="8192"></label><label>Z <input id="coord-z" type="number" min="0" max="16384" step="0.001" placeholder="Z" value="8192"></label></div>
   <div class="button-row"><button id="go-coords" class="primary">Locate</button><button id="add-marker" class="secondary">+ Marker</button></div>
+  <div class="button-row"><button id="update-marker" class="secondary" disabled>Update selected marker</button></div>
   <div class="button-row"><button id="copy-coords" class="secondary">Copy X/Z</button><button id="export-markers" class="secondary">Export CSV</button></div>
   <div class="button-row"><button id="clear-markers" class="subtle">Clear markers</button></div>
-  <div id="marker-count" class="data-state">0 saved markers (in this tab)</div>
+  <label class="field" for="marker-label">Marker label (optional)</label>
+  <input type="text" id="marker-label" maxlength="60" placeholder="e.g. Trader, Vehicle spawn">
+  <div id="marker-count" class="data-state">0 markers</div>
+  <div id="marker-list" class="marker-list" aria-label="Saved coordinate markers"><div class="data-state">No markers placed yet.</div></div>
  </section>
  <div class="sidebar-foot">
   <strong>Verified calibration</strong>
   <p>16,384 × 16,384 m • north-up<br>4,096px reference image = 4 m/px<br>Image Y = (1 − Z / 16,384) × height.</p>
-  <p class="privacy">Your uploaded images, roads and XML are processed in your browser. Nothing is sent to our servers.</p>
+  <p class="privacy">Your uploaded images, roads and XML are processed in your browser. Optionally saved in this browser's local storage. Nothing is sent to our servers.</p>
  </div>
 </aside>
 <main class="map-shell">
  <div class="map-toolbar"><div class="map-title"><strong>NASDARA</strong><span>WORLD COORDINATE WORKSPACE</span></div>
  <div class="toolbar-actions"><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit-map" aria-label="Fit map">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
  </div>
- <div class="map-region" id="map-region">
+ <div class="map-region" id="map-region" aria-label="Drop your own calibrated Nasdara satellite PNG here to load it">
    <canvas id="map-canvas" aria-label="Interactive Nasdara map" role="img"></canvas>
    <div class="loading-panel" id="empty-overlay">
     <div class="empty-symbol">⌖</div>
@@ -71,8 +79,9 @@
    <div class="map-corner"><strong>NASDARA</strong><span>16.384 km terrain extent</span></div>
    <div class="map-readout" id="cursor-readout">X — • Z —</div>
    <div class="map-credit" id="map-credit">Local imagery only • No imagery bundled</div>
+   <div class="drop-prompt" id="map-drop-prompt">Drop satellite image to load locally</div>
  </div>
- <div class="bottom-bar"><span id="zoom-label">Zoom 1×</span><span id="selected-readout">Click a point to inspect its coordinates • Shift-click to add a marker</span><span id="notice">North ↑</span></div>
+ <div class="bottom-bar"><span id="zoom-label">Zoom 1×</span><span id="selected-readout">Click to inspect X/Z • Shift-click to add a named marker • Double-click to zoom</span><span id="notice">North ↑</span></div>
 </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

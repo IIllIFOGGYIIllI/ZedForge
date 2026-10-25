@@ -49,6 +49,10 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
+## Experimental satellite mapping
+
+[Open Nasdara Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/) for a standalone local-image satellite viewer with persisted imagery, coordinates, optional event/road overlays and marker editing. No World War Z source files are modified. See [Map Lab docs](map-lab/README.md).
+
 ## Next milestones
 
 More advanced `cfgeventspawns.xml` coordinates, map-assisted editing, vehicle attachment presets, multi-server profiles, and versioned classname reference data.
