@@ -51,7 +51,7 @@ Open http://localhost:8000. JavaScript and ZIP processing have no external runti
 
 ## Experimental satellite mapping
 
-[Open Nasdara Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/) for a standalone local-image satellite viewer with persisted imagery, coordinates, optional event/road overlays and marker editing. No World War Z source files are modified. See [Map Lab docs](map-lab/README.md).
+[Open Nasdara Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/) for a detailed terrain viewer with locally loaded Nasdara satellite imagery, native paved/dirt road segments, spatially indexed building footprints, coordinate measuring, and marker management. No World War Z source files are modified. See [Map Lab docs](map-lab/README.md).
 
 ## Next milestones
 

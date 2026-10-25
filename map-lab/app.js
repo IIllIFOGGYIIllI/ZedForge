@@ -1,13 +1,82 @@
 'use strict';
 /* ZedForge Map Lab — browser-only Nasdara prototype; no proprietary map assets shipped. */
 (() => {
-  const P=window.ZedForgeProjection;
+  const P=window.ZedForgeProjection,M=window.ZedForgeMapData;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
-    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:true,showMarkers:true,imageFile:null,selectedMarkerIndex:null};
+    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
+    roadLayer:null,objectLayer:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
   const cache=window.ZedForgeMapStorage;
+  /* Deep-zoom building pictures remain user-supplied. Lazy decoding limits RAM usage. */
+  const pictureSources=new Map(),pictureDecoded=new Map(),pictureQueue=[],pictureQueued=new Set();
+  let pictureInFlight=0,pictureEpoch=0,pictureBytes=0;
+  const PICTURE_BUDGET=72*1024*1024,PICTURE_CACHE_LIMIT=180;
+  function pictureFor(model){
+    const item=pictureDecoded.get(model);
+    if(!item)return null;
+    pictureDecoded.delete(model);pictureDecoded.set(model,item);
+    return item.image;
+  }
+  function clearDecodedPictures(){
+    for(const value of pictureDecoded.values())value.image.close?.();
+    pictureDecoded.clear();pictureSources.clear();pictureQueue.length=0;pictureQueued.clear();
+    pictureBytes=0;pictureEpoch++;
+  }
+  function requestPicture(model){
+    if(!pictureSources.has(model)||pictureDecoded.has(model)||pictureQueued.has(model)||pictureQueue.length>80)return;
+    pictureQueued.add(model);pictureQueue.push(model);
+    drainPictures();
+  }
+  function drainPictures(){
+    while(pictureInFlight<2&&pictureQueue.length){
+      const model=pictureQueue.shift(),source=pictureSources.get(model),epoch=pictureEpoch;
+      if(!source){pictureQueued.delete(model);continue}
+      pictureInFlight++;
+      (async()=>{
+        const blob=source.zipEntry?await source.zipEntry.async('blob'):source.blob;
+        const image=await decodeImage(blob);
+        if(epoch!==pictureEpoch){image.close?.();return}
+        const bytes=(image.width||image.naturalWidth)*(image.height||image.naturalHeight)*4;
+        if(bytes>PICTURE_BUDGET){image.close?.();return}
+        while(pictureBytes+bytes>PICTURE_BUDGET||pictureDecoded.size>=PICTURE_CACHE_LIMIT){
+          const first=pictureDecoded.keys().next().value;if(first===undefined)break;
+          const old=pictureDecoded.get(first);old.image.close?.();pictureBytes-=old.bytes;pictureDecoded.delete(first)
+        }
+        pictureDecoded.set(model,{image,bytes});pictureBytes+=bytes;schedule();
+      })().catch(err=>{if(epoch===pictureEpoch)console.warn('Could not decode model picture',model,err)})
+        .finally(()=>{pictureQueued.delete(model);pictureInFlight--;drainPictures()});
+    }
+  }
+  async function loadPictureFiles(inputs,{restored=false}={}){
+    const selected=Array.from(inputs).map(item=>item.blob?item:{blob:item,name:item.name||''});
+    if(!selected.length)throw Error('Choose a ZIP or numbered PNGs to load');
+    if(selected.length>2500||selected.reduce((sum,x)=>sum+x.blob.size,0)>90*1024*1024)throw Error('Picture bundle exceeds 90 MB or 2,500 files');
+    const incoming=new Map();
+    for(const input of selected){
+      const name=input.name||'';
+      if(/\.zip$/i.test(name)){
+        if(!window.JSZip)throw Error('Local ZIP library is unavailable');
+        const archive=await JSZip.loadAsync(input.blob);
+        const entries=Object.values(archive.files).filter(f=>!f.dir&&/(?:^|\/)(\d{4})\.png$/i.test(f.name));
+        if(entries.length>2500)throw Error('Picture ZIP contains too many PNGs');
+        for(const entry of entries){
+          const index=Number(entry.name.match(/(\d{4})\.png$/i)[1]);
+          if(index<=8191&&!incoming.has(index))incoming.set(index,{zipEntry:entry});
+        }
+      }else if(/\.png$/i.test(name)){
+        const m=name.match(/(?:^|\/)(\d{4})\.png$/i);
+        if(m){const index=Number(m[1]);if(index<=8191&&!incoming.has(index))incoming.set(index,{blob:input.blob})}
+      }
+    }
+    if(!incoming.size)throw Error('No numbered 0000.png, 0001.png etc. found; the pictures must match the structure model indices');
+    clearDecodedPictures();
+    for(const [key,value]of incoming)pictureSources.set(key,value);
+    $('pictures-status').textContent=incoming.size.toLocaleString()+' numbered model pictures ready • decoded only when zoomed in';
+    if(!restored){interacted=true;void cacheLayer('pictures',{files:selected},'building pictures')}
+    schedule();notify('Loaded '+incoming.size+' model pictures for detailed close-up rendering')
+  }
   function setCacheStatus(label){$('local-storage-status').textContent=label}
   function queueCache(key,value){
     if(!cache)return Promise.reject(new Error('Local storage is unavailable'));
@@ -18,7 +87,9 @@
     clearTimeout(saveTimer);saveTimer=setTimeout(async()=>{
       const session={
         camera:state.camera,markers:state.markers,selected:state.selected,
-        flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers},
+        flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
+          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview},
+        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,
         filter:$('event-filter').value
       };
       try{await queueCache('session',session);setCacheStatus('✓ Map settings saved locally')}
@@ -87,7 +158,7 @@
   async function restoreCached(){
     if(!cache){setCacheStatus('Storage unsupported; export before leaving');return}
     try{
-      const [session,roads,events,image]=await Promise.all([cache.read('session'),cache.read('roads'),cache.read('events'),cache.read('image')]);
+      const [session,roads,events,image,buildings,pictures]=await Promise.all([cache.read('session'),cache.read('roads'),cache.read('events'),cache.read('image'),cache.read('buildings'),cache.read('pictures')]);
       if(interacted)return;
       if(session){
         const v=session.camera;
@@ -96,11 +167,26 @@
         }
         state.markers=Array.isArray(session.markers)?session.markers.filter(m=>m&&P.validateWorld(m.x,m.z)).slice(0,5000).map(m=>({x:m.x,z:m.z,label:typeof m.label==='string'?m.label.slice(0,60):''})):[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;
         state.selected=session.selected&&P.validateWorld(session.selected.x,session.selected.z)?session.selected:null;
-        for(const [id,key]of [['show-roads','roads'],['show-spawns','spawns'],['show-grid','grid'],['show-markers','markers']]){
+        for(const [id,key]of [['show-roads','roads'],['show-spawns','spawns'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview']]){
           if(typeof session.flags?.[key]==='boolean'){$(id).checked=session.flags[key];state['show'+key[0].toUpperCase()+key.slice(1)]=session.flags[key]}
         }
       }
-      if(roads&&Array.isArray(roads.lines)){state.roads=roads.lines;$('roads-status').textContent=roads.lines.length.toLocaleString()+' paths restored • '+(roads.name||'cached roads')}
+      if(session?.satelliteTone&&['natural','vivid','lowlight'].includes(session.satelliteTone)){$('satellite-tone').value=session.satelliteTone;state.satelliteTone=session.satelliteTone}
+      if(typeof session?.overlayAlpha==='number'&&session.overlayAlpha>=.2&&session.overlayAlpha<=1){state.overlayAlpha=session.overlayAlpha;$('overlay-alpha').value=String(Math.round(session.overlayAlpha*100))}
+      $('overlay-alpha-value').textContent=Math.round(state.overlayAlpha*100)+'%';
+      if(roads?.blob instanceof Blob){
+        try{await loadRoadLayer(roads.blob,{restored:true,name:roads.name});}catch(e){notify('Could not restore roads: '+e.message)}
+      }else if(roads&&Array.isArray(roads.lines)){
+        try{state.roadLayer=M.parseGeoJSON({type:'FeatureCollection',features:roads.lines.map(line=>({type:'Feature',geometry:{type:'LineString',coordinates:line}}))});
+          $('roads-status').textContent=state.roadLayer.count.toLocaleString()+' segments restored from earlier GeoJSON';}
+        catch(e){notify('Older road data could not be restored: '+e.message)}
+      }
+      if(buildings?.blob instanceof Blob){
+        try{await loadStructureLayer(buildings.blob,{restored:true,name:buildings.name})}catch(e){notify('Could not restore structures: '+e.message)}
+      }
+      if(Array.isArray(pictures?.files)&&pictures.files.length){
+        try{await loadPictureFiles(pictures.files,{restored:true})}catch(e){notify('Could not restore building pictures: '+e.message)}
+      }
       if(events&&Array.isArray(events.entries)&&Array.isArray(events.names)){
         state.eventSpawns=events.entries;state.eventNames=events.names;
         setEventFilter(events.names,session?.filter);
@@ -147,23 +233,78 @@
     if(!state.image)return;
     const a=toS(0,EXTENT),b=toS(EXTENT,0),w=b.x-a.x,h=b.y-a.y;
     if(w<1||h<1)return;
-    ctx.drawImage(state.image,a.x,a.y,w,h)
+    ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.filter=state.satelliteTone==='vivid'?'contrast(1.25) saturate(1.27) brightness(1.07)':state.satelliteTone==='lowlight'?'contrast(1.14) saturate(.8) brightness(.66)':'none';
+    ctx.drawImage(state.image,a.x,a.y,w,h);ctx.restore()
   }
   function drawRoads(){
-    if(!state.showRoads||!state.roads.length)return;
-    const bounds=visibleExtent(),s=P.scale(state.camera,state.width,state.height);
-    ctx.save();ctx.lineJoin='round';ctx.lineCap='round';ctx.lineWidth=Math.max(1.2,Math.min(3.2,s*12));
-    ctx.strokeStyle='rgba(255,226,152,.92)';
-    for(const line of state.roads){
-      if(line.length<2)continue;
-      let inView=false;for(const [x,z] of line){if(x>=bounds.x0&&x<=bounds.x1&&z>=bounds.z0&&z<=bounds.z1){inView=true;break}}
-      if(!inView&&line.length>2){ /* Segments may cross the viewport without a vertex inside; draw anyway. */ }
-      ctx.beginPath();
-      for(let i=0;i<line.length;i++){const a=toS(line[i][0],line[i][1]);if(!i)ctx.moveTo(a.x,a.y);else ctx.lineTo(a.x,a.y)}
-      ctx.stroke()
+    const layer=state.roadLayer;
+    if(!state.showRoads||!layer||state.camera.zoom<1.4)return;
+    const v=visibleExtent(),scale=P.scale(state.camera,state.width,state.height),data=layer.values,types=layer.kinds;
+    ctx.save();ctx.globalAlpha=state.overlayAlpha;ctx.lineJoin='round';ctx.lineCap='round';
+    const passes=[[1,state.showDirt,'#302a24','#efe0cf'],[0,state.showAsphalt,'#302923','#ffe09b']];
+    for(const [kind,enabled,outline,fill] of passes){
+      if(!enabled)continue;
+      ctx.beginPath();let used=0;
+      for(let i=0;i<layer.count;i++){
+        if(types[i]!==kind)continue;
+        const k=i*4,x1=data[k],z1=data[k+1],x2=data[k+2],z2=data[k+3];
+        if(Math.max(x1,x2)<v.x0||Math.min(x1,x2)>v.x1||Math.max(z1,z2)<v.z0||Math.min(z1,z2)>v.z1)continue;
+        const a=toS(x1,z1),b=toS(x2,z2);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);used++;
+      }
+      if(!used)continue;
+      ctx.strokeStyle=outline;ctx.lineWidth=state.camera.zoom>12?3.7:3;ctx.stroke();
+      ctx.strokeStyle=fill;ctx.lineWidth=state.camera.zoom>12?2.3:1.6;ctx.stroke();
     }
-    ctx.restore()
+    ctx.restore();
   }
+  function drawStructures(){
+    if(!state.showStructures||!state.objectLayer)return;
+    M.renderStructures(ctx,state.objectLayer,{camera:state.camera,width:state.width,height:state.height,projection:P,opacity:state.overlayAlpha,max:7500,pictureFor,requestPicture});
+  }
+  function updateScale(){
+    const wanted=135/P.scale(state.camera,state.width,state.height);
+    const candidate=[10,20,50,100,200,500,1000,2000,5000,10000];
+    let length=candidate[0];
+    for(const value of candidate)if(value<=wanted)length=value;
+    $('scale-label').textContent=length>=1000?(length/1000)+' km':length+' m';
+    $('scale-line').style.width=Math.round(length*P.scale(state.camera,state.width,state.height))+'px';
+  }
+  function drawOverview(){
+    const panel=$('overview-panel');
+    panel.classList.toggle('hidden',!state.showOverview);
+    if(!state.showOverview)return;
+    const mini=$('overview-canvas'),c=mini.getContext('2d'),w=mini.width,h=mini.height;
+    c.clearRect(0,0,w,h);c.fillStyle='#193137';c.fillRect(0,0,w,h);
+    if(state.image){c.filter=state.satelliteTone==='lowlight'?'brightness(.75)':'none';c.drawImage(state.image,0,0,w,h);c.filter='none'}
+    c.strokeStyle='#75eab3';c.lineWidth=1.5;c.strokeRect(.5,.5,w-1,h-1);
+    const r=visibleExtent();
+    const x=Math.max(0,Math.min(w,r.x0/EXTENT*w)),y=Math.max(0,Math.min(h,(1-r.z1/EXTENT)*h)),
+      endX=Math.max(0,Math.min(w,r.x1/EXTENT*w)),endY=Math.max(0,Math.min(h,(1-r.z0/EXTENT)*h));
+    c.fillStyle='#7ceec522';c.fillRect(x,y,endX-x,endY-y);c.strokeStyle='#d4fff0';c.lineWidth=2;c.strokeRect(x,y,endX-x,endY-y);
+    if(state.selected){c.fillStyle='#ffde91';c.beginPath();c.arc(state.selected.x/EXTENT*w,(1-state.selected.z/EXTENT)*h,2.5,0,Math.PI*2);c.fill()}
+  }
+  function updateLayerInfo(){
+    const r=state.roadLayer,o=state.objectLayer,parts=[];
+    if(r)parts.push(r.count.toLocaleString()+' road segments');
+    if(o)parts.push(o.count.toLocaleString()+' building placements');
+    if(state.eventSpawns.length)parts.push(state.eventSpawns.length.toLocaleString()+' spawns');
+    $('map-layer-count').textContent=parts.length?parts.join(' • '):'Load roads and building geometry for sharper detail';
+  }
+  function drawMeasurement(){
+    const m=state.measurement;if(!m?.start)return;
+    const a=toS(m.start.x,m.start.z),b=m.end?toS(m.end.x,m.end.z):state.measuring&&state.cursor?toS(state.cursor.x,state.cursor.z):null;
+    ctx.save();ctx.lineWidth=2;ctx.strokeStyle='#89fff1';ctx.setLineDash([9,5]);ctx.beginPath();
+    if(b){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+    ctx.setLineDash([]);ctx.fillStyle='#e9fff4';ctx.beginPath();ctx.arc(a.x,a.y,4,0,Math.PI*2);ctx.fill();
+    if(b){ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.fill();
+      const dist=Math.hypot((m.end||state.cursor).x-m.start.x,(m.end||state.cursor).z-m.start.z);
+      const label=(dist>=1000?(dist/1000).toFixed(2)+' km':dist.toFixed(1)+' m');
+      ctx.font='bold 12px system-ui';ctx.fillStyle='#ffffff';ctx.strokeStyle='#0b171b';ctx.lineWidth=4;ctx.strokeText(label,(a.x+b.x)/2+7,(a.y+b.y)/2-6);ctx.fillText(label,(a.x+b.x)/2+7,(a.y+b.y)/2-6)
+    }
+    ctx.restore();
+  }
+
   function pin(x,z,fill,r,stroke='#09141a'){
     const p=toS(x,z);if(p.x<-15||p.x>state.width+15||p.y<-15||p.y>state.height+15)return;
     ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=1.2;ctx.stroke()
@@ -191,7 +332,7 @@
   function draw(){
     ctx.setTransform(state.dpr,0,0,state.dpr,0,0);
     ctx.fillStyle='#0d1e26';ctx.fillRect(0,0,state.width,state.height);
-    drawImage();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawEvents();drawMarkers();drawSelection()
+    drawImage();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawEvents();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo()
   }
   function setCamera(next){state.camera=next;updateZoom();schedule();saveView()}
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
@@ -207,7 +348,7 @@
   }
   canvas.addEventListener('pointerdown',mouseEvent);
   canvas.addEventListener('pointermove',e=>{
-    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);
+    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);if(state.measuring&&state.measurement?.start)schedule();
     if(!state.drag)return;
     const dx=e.clientX-state.drag.x,dy=e.clientY-state.drag.y;
     if(Math.hypot(e.clientX-state.pointerDown.clientX,e.clientY-state.pointerDown.clientY)>4)state.drag.moved=true;
@@ -222,7 +363,17 @@
     if(!state.drag)return;
     const wasDrag=state.drag.moved;
     state.drag=null;region.classList.remove('dragging');
-    if(!wasDrag){const p=worldFromPointer(e);if(worldValid(p)){state.selected=p;coordsInSidebar(p);$('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z);if(e.shiftKey)addMarker(p);saveView()}}
+    if(!wasDrag){const p=worldFromPointer(e);if(worldValid(p)){
+      if(state.measuring){
+        if(!state.measurement?.start||state.measurement.end)state.measurement={start:{x:p.x,z:p.z},end:null};
+        else{state.measurement.end={x:p.x,z:p.z};state.measuring=false;region.classList.remove('measuring');$('measure-toggle').classList.remove('active');$('measure-toggle').textContent='Measure distance';
+          const km=Math.hypot(state.measurement.end.x-state.measurement.start.x,state.measurement.end.z-state.measurement.start.z);
+          $('measure-status').textContent=km>=1000?(km/1000).toFixed(3)+' km':km.toFixed(1)+' m';
+        }
+      }else{
+        state.selected=p;coordsInSidebar(p);$('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z);if(e.shiftKey)addMarker(p);saveView()
+      }
+    }}
     schedule()
   });
   canvas.addEventListener('pointercancel',()=>{state.drag=null;region.classList.remove('dragging')});
@@ -234,9 +385,25 @@
   $('zoom-in').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom*1.6,state.width,state.height));
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
-  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers']]){
+  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview']]){
     $(checkbox).onchange=e=>{state[key]=e.target.checked;schedule();saveView()}
   }
+  $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
+  $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();saveView()};
+  $('toggle-sidebar').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
+  $('focus-map').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
+  const overview=$('overview-canvas');
+  overview.addEventListener('click',e=>{const rect=overview.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*EXTENT,z=(1-(e.clientY-rect.top)/rect.height)*EXTENT;
+    if(P.validateWorld(x,z))setCamera(P.view(x,z,Math.max(2,state.camera.zoom)))});
+  $('measure-toggle').onclick=()=>{
+    state.measuring=!state.measuring;
+    if(state.measuring){state.measurement=null;$('measure-status').textContent='Click the start and end positions on the map';}
+    else $('measure-status').textContent='Measurement tool disabled';
+    $('measure-toggle').classList.toggle('active',state.measuring);
+    $('measure-toggle').textContent=state.measuring?'Cancel measurement':'Measure distance';
+    region.classList.toggle('measuring',state.measuring);schedule();
+  };
+  $('measure-reset').onclick=()=>{state.measurement=null;state.measuring=false;region.classList.remove('measuring');$('measure-toggle').classList.remove('active');$('measure-toggle').textContent='Measure distance';$('measure-status').textContent='Measurement cleared';schedule()};
   function inputCoords(){
     const x=Number($('coord-x').value),z=Number($('coord-z').value);
     return $('coord-x').value.trim()&&$('coord-z').value.trim()&&P.validateWorld(x,z)?{x,z}:null
@@ -291,30 +458,41 @@
     try{await showSatellite(file);notify('Satellite image loaded by drop')}
     catch(err){notify('Image loading failed: '+err.message)}
   });
-  function validateCoords(pair){return Array.isArray(pair)&&pair.length>=2&&Number.isFinite(pair[0])&&Number.isFinite(pair[1])&&P.validateWorld(pair[0],pair[1])}
-  function extractRoads(geojson){
-    const result=[];const features=geojson.type==='FeatureCollection'?geojson.features:[geojson];
-    if(!Array.isArray(features)||features.length>250000)throw Error('Too many GeoJSON features');
-    for(const feature of features){
-      const geometry=feature.geometry||feature;if(!geometry?.coordinates)continue;
-      const lines=geometry.type==='LineString'?[geometry.coordinates]:geometry.type==='MultiLineString'?geometry.coordinates:[];
-      for(const line of lines){if(!Array.isArray(line)||line.length>200000)throw Error('Too many points in road segment');
-        if(line.length>=2&&line.every(validateCoords))result.push(line.map(p=>[p[0],p[1]]))
-      }
-    }
-    if(result.length>100000)throw Error('Too many road segments');
-    return result
+  function maxDataSize(file,limit){if(file.size>limit)throw Error('File too large (maximum '+Math.round(limit/1024/1024)+' MB)')}
+  async function loadRoadLayer(file,{restored=false,name=null}={}){
+    maxDataSize(file,16*1024*1024);
+    const filename=name||file.name||'Imported roads';
+    const roads=/\.roads$/i.test(filename)?M.parseRoads(await file.arrayBuffer()):M.parseGeoJSON(JSON.parse(await file.text()));
+    state.roadLayer=roads;
+    $('roads-status').textContent=roads.count.toLocaleString()+' road segments ('+roads.asphalt.toLocaleString()+' paved / '+roads.dirt.toLocaleString()+' dirt) • '+filename;
+    if(!restored){interacted=true;void cacheLayer('roads',{blob:file,name:filename},'roads')}
+    schedule();notify('Loaded '+roads.count.toLocaleString()+' accurate road segments');return roads;
+  }
+  async function loadStructureLayer(file,{restored=false,name=null}={}){
+    maxDataSize(file,20*1024*1024);
+    const filename=name||file.name||'Imported buildings';
+    $('objects-status').textContent='Reading and indexing structure geometry…';
+    await new Promise(done=>setTimeout(done,0));
+    const structures=M.parseObjects(await file.arrayBuffer());
+    state.objectLayer=structures;
+    $('objects-status').textContent=structures.count.toLocaleString()+' accurate building placements • '+structures.modelCount+' models • '+filename;
+    if(!restored){interacted=true;void cacheLayer('buildings',{blob:file,name:filename},'buildings')}
+    schedule();notify('Loaded '+structures.count.toLocaleString()+' calibrated structure placements');return structures;
   }
   $('roads-file').addEventListener('change',async e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
-    try{maxSize(file,15*1024*1024);const roads=extractRoads(JSON.parse(await file.text()));
-      if(!roads.length)throw Error('No LineString/MultiLineString world-coordinate paths found');
-      state.roads=roads;interacted=true;
-      $('roads-status').textContent=roads.length.toLocaleString()+' road paths • '+file.name;
-      void cacheLayer('roads',{lines:roads,name:file.name},'road layer');
-      schedule();notify('Loaded '+roads.length+' road paths')
-    }catch(err){notify('Road layer rejected: '+err.message)}
+    try{await loadRoadLayer(file)}catch(err){notify('Road layer rejected: '+err.message)}
   });
+  $('objects-file').addEventListener('change',async e=>{
+    const file=e.target.files?.[0];e.target.value='';if(!file)return;
+    try{await loadStructureLayer(file)}catch(err){$('objects-status').textContent='Unable to read structure file';notify('Building layer rejected: '+err.message)}
+  });
+  $('pictures-file').addEventListener('change',async e=>{
+    const files=[...(e.target.files||[])];e.target.value='';if(!files.length)return;
+    $('pictures-status').textContent='Indexing numbered model pictures…';
+    try{await loadPictureFiles(files)}catch(err){$('pictures-status').textContent='Could not load pictures';notify('Building pictures rejected: '+err.message)}
+  });
+
   function parseEventSpawns(raw){
     if(/<!DOCTYPE|<!ENTITY/i.test(raw))throw Error('DOCTYPE/ENTITY declarations are not supported');
     const doc=new DOMParser().parseFromString(raw,'application/xml');
@@ -345,5 +523,6 @@
   $('event-filter').onchange=()=>{schedule();saveView()};
   window.addEventListener('resize',resize);
   if('ResizeObserver'in window)new ResizeObserver(resize).observe(region);
+  $('show-grid').checked=state.showGrid;
   resize();updateZoom();renderMarkerList();void restoreCached();
 })();

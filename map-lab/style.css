@@ -19,3 +19,33 @@
 
 .marker-line.selected{border-color:var(--accent);background:#16342d}
 .marker-line.selected .marker-label{color:var(--accent)}
+
+/* v0.3.3 major map rendering release */
+.reference-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.source-tip{font-size:11px;margin:8px 0 15px}
+.sub-toggle{padding-left:19px;opacity:.85}
+#overlay-alpha{display:block;width:100%;accent-color:var(--accent);margin:10px 0 5px}
+#overlay-alpha-value{float:right;color:var(--accent);font-weight:750}
+.tool-divider{border-top:1px solid var(--edge);margin:20px 0}
+.section-label{font-size:10px;letter-spacing:1.6px;font-weight:850;color:var(--accent)}
+.map-legend{position:absolute;right:16px;top:78px;display:flex;flex-wrap:wrap;gap:7px;pointer-events:none;color:#e4f0e9;background:#0a1b20d9;border:1px solid #375150;border-radius:7px;padding:7px 9px;font-size:10px}
+.map-legend span{display:inline-flex;align-items:center;gap:5px}
+.map-legend i{width:10px;height:4px;border-radius:4px;display:inline-block}
+.legend-road{background:#ffdc78}.legend-dirt{background:#eee0d0}.legend-building{background:#9baaa4}.legend-spawn{background:#ffc171}
+.scale-widget{position:absolute;left:18px;bottom:60px;pointer-events:none;color:#e8f4f0;text-shadow:1px 1px 3px #000;font-size:10px;font-weight:750}
+#scale-line{width:80px;height:10px;border-left:2px solid white;border-right:2px solid white;border-bottom:2px solid white;filter:drop-shadow(0 1px 2px black);margin-top:4px}
+.overview-panel{position:absolute;right:16px;top:115px;width:185px;padding:2px;background:#0b1b20ec;border:1px solid #41605a;border-radius:9px;box-shadow:0 8px 22px #0008}
+.overview-panel canvas{display:block;width:180px;height:180px;cursor:crosshair;border-radius:5px}
+.overview-panel span{display:block;text-align:center;font-size:9px;font-weight:850;color:var(--accent);letter-spacing:1px;padding:4px}
+.overview-panel.hidden{display:none}
+.layer-info{position:absolute;left:18px;top:58px;max-width:45%;font-size:10px;color:#dce8e2;padding:7px 10px;background:#0b1b20ba;border-radius:6px;pointer-events:none}
+.focus-mode .sidebar{display:none}
+.focus-mode .map-shell{width:100%}
+.focus-mode .map-toolbar{height:47px}
+.map-region.measuring #map-canvas{cursor:crosshair}
+#measure-toggle.active{border-color:var(--accent);color:var(--accent);background:#15362a}
+@media(max-width:960px){.overview-panel{right:12px;top:110px;width:145px}.overview-panel canvas{width:140px;height:140px}.map-legend{max-width:180px}.layer-info{max-width:56%}}
+@media(max-width:580px){.overview-panel{display:none}.map-toolbar{padding:0 8px}.toolbar-actions{gap:3px}.toolbar-actions button{padding:0 7px;font-size:12px}.map-title{font-size:11px}.map-legend{display:none}.layer-info{max-width:88%;top:52px}.map-readout{bottom:13px}.scale-widget{bottom:57px}}
+
+/* Zoomed building picture layer, matching local .objects model indices */
+#pictures-status{color:var(--accent)}

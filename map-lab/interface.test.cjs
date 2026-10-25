@@ -4,13 +4,14 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
 check('All JavaScript sources are local and present',()=>{
- assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));
- for(const src of scripts){assert(src.startsWith('./'));assert(fs.existsSync(path.join(root,src)))}
+ assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('../vendor/jszip.min.js'));
+ assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
+ for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
 });
 check('Map Lab source contains no automatic remote image requests',()=>{assert(!/fetch\((['"])(https?:)/.test(app));assert(!/<script[^>]*src="https?:/.test(html))});
 check('All referenced element IDs are present',()=>{
@@ -26,4 +27,25 @@ check('Map coordinates use verified 16384m world extent',()=>{assert(projection.
 check('Local storage uses IndexedDB, not network',()=>{assert(storage.includes('indexedDB.open'));assert(!storage.includes('fetch('))});
 check('Map drag/drop and mobile image decoder fallback exist',()=>{assert(app.includes("'dragenter'"));assert(app.includes('new Image()'))});
 check('Core visual styling exists',()=>{assert(css.includes('.marker-line.selected'));assert(css.includes('.source-quality'))});
+check('Native roads and buildings import controls are present',()=>{
+ for(const id of ['objects-file','roads-file','show-structures','show-asphalt','show-dirt','map-layer-count'])assert(html.includes('id="'+id+'"'));
+ assert(app.includes('M.parseRoads'));assert(app.includes('M.parseObjects'));
+});
+check('Binary roads and buildings are restored from browser storage',()=>{
+ assert(app.includes("cache.read('buildings')"));assert(app.includes("cacheLayer('buildings'"));assert(app.includes('loadStructureLayer'));
+ assert(app.includes('loadRoadLayer'));assert(app.includes("cache.read('roads')"));
+});
+check('Measurements, overview and map focus work without external scripts',()=>{
+ for(const id of ['measure-toggle','measure-reset','measure-status','overview-canvas','toggle-sidebar','focus-map','scale-line'])assert(html.includes('id="'+id+'"'));
+ assert(app.includes('drawMeasurement'));assert(app.includes('drawOverview'));assert(app.includes('updateScale'));
+});
+check('Satellite colour modes and overlay opacity are wired',()=>{
+ assert(app.includes('satelliteTone'));assert(app.includes('overlayAlpha'));assert(html.includes('id="satellite-tone"'));assert(html.includes('id="overlay-alpha"'));
+});
+check('Spatially indexed structure renderer exists',()=>{assert(mapdata.includes('collectVisible'));assert(mapdata.includes('renderStructures'));assert(mapdata.includes('DVMOBJ1'));assert(mapdata.includes('DVMROAD1'))});
+check('Top-down building imagery uses a local ZIP and lazy decoding',()=>{
+ assert(html.includes('id="pictures-file"'));assert(html.includes('id="pictures-status"'));
+ assert(app.includes('loadPictureFiles'));assert(app.includes("cache.read('pictures')"));assert(app.includes('PICTURE_BUDGET'));
+ assert(mapdata.includes('ctx.drawImage(photo'));assert(mapdata.includes('model.matrix'));
+});
 console.log('\n'+passed+' Map Lab interface checks passed.');

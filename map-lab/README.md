@@ -1,64 +1,68 @@
-# ZedForge Nasdara Map Lab (experimental)
+# Nasdara Map Lab — detailed terrain viewer (v0.3.3)
 
-A standalone, browser-based prototype for **calibrated Nasdara satellite imagery**. The World War Z website is not modified or coupled to this project.
+**[Launch Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/)**
 
-**Preview:** https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/
+This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
-## Current features — Map Lab update (v0.3.2)
+## Major v0.3.3 map improvements
 
-- Load a locally supplied Nasdara satellite image (PNG, JPG, or WebP).
-- Use 16,384 × 16,384 metre world calibration, north-up.
-- Smooth pan and anchored zoom using the actual game X/Z coordinates.
-- **Optionally remember the satellite image in browser IndexedDB**, without uploading it to any server. Check/uncheck **Remember image locally**, and use **Forget saved image** to remove saved imagery.
-- Restore your map position, markers, road GeoJSON and event-spawn overlays after refreshing when browser storage permits.
-- Drag and drop satellite imagery onto the map.
-- Inspect native satellite resolution in metres per pixel; a 4,096px Nasdara image is **4 m/pixel** and will not magically show individual small objects at extreme zoom.
-- Add, label, select, edit and delete coordinate markers; export CSV of labelled markers.
-- Optional road GeoJSON overlays in raw **[X,Z] game coordinates** and an optional `cfgeventspawns.xml` layer with event filtering.
-- Grid, layer toggles, double-click zoom, shift-click markers, and keyboard-safe coordinate entry.
-- Source files are handled locally; no third-party map websites are scraped.
+- Import **real native paved and dirt roads** from the locally supplied `nasdara.roads` binary (47,236 segments in the publicly documented reference dataset).
+- Import **real native structure footprints** from the locally supplied `nasdara.objects` binary (295,195 placements in the publicly documented reference dataset).
+- Spatial-indexed building rendering: show footprints at high zoom, cull objects far outside the viewport, and cap per-frame drawing cost.
+- **Optional genuine top-down building artwork:** load a ZIP containing `0000.png`, `0001.png`, etc. (or select multiple numbered PNG files) matching the `.objects` model indices. At close zoom the viewer overlays the real model images through the source affine transforms. Images are decoded lazily with a 72 MiB decoded-picture cache instead of loading thousands simultaneously.
+- Independently enable paved roads, dirt roads, building outlines, player markers, event positions and the coordinate grid.
+- Switch satellite rendering between Natural, Enhanced Detail and Darkened Tactical; adjust vector overlay opacity.
+- Overview navigator in the upper-right, with viewport rectangle and click-to-center.
+- Measure distance between two chosen map points with real X/Z metre distances.
+- Full-width map focus mode and detailed ruler / scale bar.
+- Image import, local autosave, offline cached source, marker management, coordinate search, labeled marker CSV, and drag-and-drop remain supported.
+- IndexedDB can locally remember imported road and building binary files, as well as satellite images and markers.
 
-## Start testing
+## How to actually see accurate roads and buildings
 
-Open the [Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/).
+The reference files are published independently in [FeliciaDayZ's DayZ Vehicle Map repository](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map). **They are not bundled, mirrored, or fetched by ZedForge.** Follow the links below, download files locally and use them only where you have appropriate rights.
 
-1. Upload an image you are permitted to use. For a privately evaluated source, review the Nasdara map project linked inside the Map Lab.
-2. Zoom and pan, then use the X/Z inputs to locate a known game position.
-3. If desired, import your own road GeoJSON or `cfgeventspawns.xml` and filter spawn points.
-4. Shift-click to place markers or type X/Z values and use Add Marker. Select a marker from the list to edit its coordinates or label.
-5. Export labelled marker CSV. This is not a game-ready spawn XML.
+1. [Nasdara satellite image (nasdara.png)](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/maps/nasdara.png) — load with **Load satellite image**.
+2. [Native road segments (nasdara.roads)](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/roads/nasdara.roads) — load with **Load actual roads**.
+3. [Native structure placement/footprints (nasdara.objects)](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/objects/nasdara/nasdara.objects) — load with **Load building footprints**.
+4. **For building/roof imagery:** separately obtain the project’s [numbered picture files](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/tree/main/data/objects/nasdara/pictures), if you have permission to use them. Select the PNG files in the browser, or place them into one ZIP and import the ZIP using **Load detailed building pictures**.
+5. Optionally add `cfgeventspawns.xml` from your server and inspect event positions.
 
-Your local storage might not support an image as large as the source file, or site data might be cleared later. **Always export critical coordinate work.**
+**Without the additional numbered pictures, the structure file renders footprint polygons rather than textured roofs.** Adding matching images allows much more detailed close-up artwork, but source satellite texture resolution is still limited by the image you load.
 
-## Calibration
+## Calibration and data formats
 
-Nasdara world extent: 0–16,384 m on both axes. A correctly calibrated, north-up image maps to world positions as:
-
+Nasdara world extent: X and Z from 0–16,384 metres. North-up projected image:
 ```
 image_x = world_x / 16384 * image_width
 image_y = (1 - world_z / 16384) * image_height
 ```
+The original satellite is 4096 px wide, or 4 metres per native pixel.
 
-An image that has been cropped, rotated, stretched, or padded with borders will not automatically align. The Map Lab does not currently offer image calibration controls.
+Binary parsers are strict: `DVMROAD1` has a 16-byte header and 20-byte segments, and `DVMOBJ1\0` has 28-byte header, 60-byte model records, ring/point arrays and 20-byte placement records. Invalid world sizes, unexpected bytes, malformed records and out-of-range coordinates are rejected. These are the documented *DayZ Vehicle Map project* formats, not official DayZ XML formats. Roads from generic GeoJSON may alternatively be imported using in-game X/Z coordinates.
 
-## Not yet implemented
+## Browser requirements and limitations
 
-- Server-ready edits to `cfgeventspawns.xml` (the overlay is read-only).
-- Higher-resolution satellite tile pyramid / streamed source images.
-- Verified building footprint and fully licensed road layers.
-- Click-to-place polygons and circles.
-- Official publishing of proprietary DayZ-derived assets. Loading locally does **not** grant redistribution permission.
-- Integration into the WWZ site (explicitly excluded until requested).
+- Recent Chromium/Opera, Firefox or Safari with Canvas 2D, Path2D, IndexedDB and local file APIs. Large source images may exceed browser storage or graphics memory quotas.
+- The viewer **does not bundle any DayZ images**. Local loading is not redistribution permission.
+- It does not load official game archives directly; separate extraction/conversion is required.
+- Imported `cfgeventspawns.xml` is read-only here; marker CSV is not game-ready spawn XML.
+- The source satellite image cannot gain texture detail just by zooming. For more detailed imagery, a higher-resolution licensed terrain source and texture rendering/picture layers are needed.
+- Some structure records are deliberately not drawn at far zoom to preserve speed.
+- Structures without a matching numbered picture fall back to polygon footprints. Pictures and the structure binary must share the same model index mapping; files from different releases may be incompatible.
+- No code or data from this build has been merged into the World War Z website.
 
-## Automated tests
+## Test locally
 
 ```sh
+python -m http.server 8000
 node map-lab/projection.test.cjs
 node map-lab/interface.test.cjs
+node map-lab/mapdata.test.cjs
 ```
 
-The projection test covers coordinate transforms, image calibration, anchored zoom and boundaries. The interface test catches missing IDs, missing assets, unsupported external script dependencies and markup wiring.
+Large-volume synthetic stress checks were also performed at the reference record counts. Browser testing with actual independently published files and terrain data is still required before treating visual quality or exact alignment as verified.
 
-## Asset licensing
+## Attribution and permissions
 
-No proprietary imagery is included. The linked [DayZ Vehicle Map project](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map) independently publishes reference Nasdara imagery and documents a terrain extraction method; independently verify your right to use or redistribute any third-party source. The Map Lab's local file workflow avoids copying those images into ZedForge or World War Z.
+The original [DayZ Vehicle Map project](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map) documents the satellite extraction and road/structure formats. Its README credits DayZed.GG for the source road and structure geometry; copying, bundling or redistributing those assets may require relevant permission. ZedForge only provides local **import/parser/rendering code**, plus links to the original source. Use permitted files only.

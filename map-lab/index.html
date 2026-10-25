@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="./style.css">
 <script src="./projection.js" defer></script>
 <script src="./storage.js" defer></script>
+<script src="../vendor/jszip.min.js" defer></script>
+<script src="./mapdata.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
@@ -30,9 +32,17 @@
   <label class="toggle" for="remember-image"><input id="remember-image" type="checkbox" checked> Remember image locally <span>private to this browser</span></label>
   <div class="button-row storage-line"><button id="forget-image" class="secondary">Forget saved image</button><span id="local-storage-status" class="data-state">Checking local storage…</span></div>
   <p class="hint">Need a reference image? <a class="reference-link" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/maps/nasdara.png" target="_blank" rel="noopener noreferrer">View the independently published Nasdara PNG</a> (33 MB). Download it from its source, then load it locally here. Check permitted uses before redistribution.</p>
-  <label class="file-button secondary" for="roads-file"><span>⌁</span> Add road overlay <small>GeoJSON • optional</small></label>
-  <input id="roads-file" type="file" accept=".json,.geojson,application/json" hidden>
-  <div class="data-state" id="roads-status">No road layer</div>
+  <label class="file-button secondary" for="roads-file"><span>⌁</span> Load actual roads <small>Nasdara .roads binary or GeoJSON</small></label>
+  <input id="roads-file" type="file" accept=".roads,.json,.geojson,application/json,application/octet-stream" hidden>
+  <div class="data-state" id="roads-status">No roads loaded</div>
+  <p class="hint source-tip">The reference project provides <a class="reference-link" target="_blank" rel="noopener noreferrer" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/roads/nasdara.roads">nasdara.roads</a>. Download it from its original source and load locally. No files are copied into ZedForge.</p>
+  <label class="file-button secondary" for="objects-file"><span>▤</span> Load building footprints <small>Nasdara .objects geometry</small></label>
+  <input id="objects-file" type="file" accept=".objects,application/octet-stream" hidden>
+  <div class="data-state" id="objects-status">No structure layer</div>
+  <label class="file-button secondary" for="pictures-file"><span>▧</span> Load detailed building pictures <small>ZIP of numbered PNGs, or select multiple PNG files</small></label>
+  <input id="pictures-file" type="file" accept=".zip,image/png" multiple hidden>
+  <div class="data-state" id="pictures-status">No building pictures loaded; polygons will be shown instead</div>
+  <p class="hint source-tip">To add accurate footprints, use the independently published <a class="reference-link" target="_blank" rel="noopener noreferrer" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/objects/nasdara/nasdara.objects">nasdara.objects</a> file. It contains model outlines. For detailed top-down artwork, add a ZIP of the corresponding <a class="reference-link" target="_blank" rel="noopener noreferrer" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/tree/main/data/objects/nasdara/pictures">numbered model pictures</a> or select the PNG files from that directory. Image decoding is lazy and memory-bounded.</p>
   <label class="file-button secondary" for="events-file"><span>⌖</span> Add spawn overlay <small>cfgeventspawns.xml • optional</small></label>
   <input id="events-file" type="file" accept=".xml,text/xml,application/xml" hidden>
   <div class="data-state" id="events-status">No event positions loaded</div>
@@ -40,11 +50,19 @@
  <section class="group">
   <h2><span>02</span> Layers</h2>
   <label class="toggle"><input id="show-roads" type="checkbox" checked> Roads <span>vector overlay</span></label>
+  <label class="toggle sub-toggle"><input id="show-asphalt" type="checkbox" checked> Paved roads</label>
+  <label class="toggle sub-toggle"><input id="show-dirt" type="checkbox" checked> Dirt tracks</label>
+  <label class="toggle"><input id="show-structures" type="checkbox" checked> Detailed buildings <span>high zoom • PNG artwork if loaded</span></label>
   <label class="toggle"><input id="show-spawns" type="checkbox" checked> Imported spawn positions</label>
-  <label class="toggle"><input id="show-grid" type="checkbox" checked> Coordinate grid</label>
+  <label class="toggle"><input id="show-grid" type="checkbox"> Coordinate grid</label>
+  <label class="toggle"><input id="show-overview" type="checkbox" checked> Overview navigator</label>
   <label class="toggle"><input id="show-markers" type="checkbox" checked> My markers</label>
   <label class="field" for="event-filter">Event filter</label>
   <select id="event-filter"><option value="all">All events</option></select>
+  <label class="field" for="satellite-tone">Satellite appearance</label>
+  <select id="satellite-tone"><option value="natural">Natural colours</option><option value="vivid">Enhanced detail</option><option value="lowlight">Darkened tactical</option></select>
+  <label class="field" for="overlay-alpha">Overlay strength <output id="overlay-alpha-value">85%</output></label>
+  <input id="overlay-alpha" type="range" min="20" max="100" step="5" value="85">
  </section>
  <section class="group">
   <h2><span>03</span> Coordinates</h2>
@@ -54,6 +72,10 @@
   <div class="button-row"><button id="update-marker" class="secondary" disabled>Update selected marker</button></div>
   <div class="button-row"><button id="copy-coords" class="secondary">Copy X/Z</button><button id="export-markers" class="secondary">Export CSV</button></div>
   <div class="button-row"><button id="clear-markers" class="subtle">Clear markers</button></div>
+  <div class="tool-divider"></div>
+  <div class="section-label">DISTANCE MEASUREMENT</div>
+  <div class="button-row"><button id="measure-toggle" class="secondary">Measure distance</button><button id="measure-reset" class="secondary">Clear measurement</button></div>
+  <div class="data-state" id="measure-status">Measure the distance between two map locations in metres.</div>
   <label class="field" for="marker-label">Marker label (optional)</label>
   <input type="text" id="marker-label" maxlength="60" placeholder="e.g. Trader, Vehicle spawn">
   <div id="marker-count" class="data-state">0 markers</div>
@@ -67,7 +89,7 @@
 </aside>
 <main class="map-shell">
  <div class="map-toolbar"><div class="map-title"><strong>NASDARA</strong><span>WORLD COORDINATE WORKSPACE</span></div>
- <div class="toolbar-actions"><button id="zoom-out" aria-label="Zoom out">−</button><button id="fit-map" aria-label="Fit map">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button></div>
+ <div class="toolbar-actions"><button id="toggle-sidebar" aria-label="Toggle controls">Controls</button><button id="fit-map" aria-label="Fit map">Fit</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="focus-map" aria-label="Toggle focused map view">Focus</button></div>
  </div>
  <div class="map-region" id="map-region" aria-label="Drop your own calibrated Nasdara satellite PNG here to load it">
    <canvas id="map-canvas" aria-label="Interactive Nasdara map" role="img"></canvas>
@@ -79,6 +101,10 @@
    <div class="map-corner"><strong>NASDARA</strong><span>16.384 km terrain extent</span></div>
    <div class="map-readout" id="cursor-readout">X — • Z —</div>
    <div class="map-credit" id="map-credit">Local imagery only • No imagery bundled</div>
+   <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-spawn"></i> Spawn</span></div>
+   <div class="scale-widget"><div id="scale-label">1 km</div><div id="scale-line"></div></div>
+   <div id="overview-panel" class="overview-panel"><canvas id="overview-canvas" width="180" height="180" aria-label="Map overview navigator" title="Click to jump to a location"></canvas><span>OVERVIEW</span></div>
+   <div id="map-layer-count" class="layer-info" role="status">Satellite image only • Load actual roads and buildings for detail</div>
    <div class="drop-prompt" id="map-drop-prompt">Drop satellite image to load locally</div>
  </div>
  <div class="bottom-bar"><span id="zoom-label">Zoom 1×</span><span id="selected-readout">Click to inspect X/Z • Shift-click to add a named marker • Double-click to zoom</span><span id="notice">North ↑</span></div>
