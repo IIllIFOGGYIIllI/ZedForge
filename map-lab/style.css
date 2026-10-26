@@ -59,3 +59,15 @@
 /* Actual close-up road coverage is controlled separately from visibility. */
 #road-width{display:block;width:100%;accent-color:var(--accent);margin:9px 0 5px}
 #road-width-value{float:right;color:var(--accent);font-weight:800}
+
+/* Consolidated map upgrade — optional satellite tiles, POIs, trees, landmark checks */
+#poi-search{width:100%;background:var(--panel2);border:1px solid var(--edge);border-radius:8px;color:var(--text);padding:10px}
+#poi-results{min-height:80px;height:116px;font-size:11px;display:block;overflow:auto;margin:8px 0 2px;padding:5px}
+#poi-results:empty{display:none}
+#poi-results option{padding:5px 6px;border-radius:4px}
+#poi-results option:hover{background:#2c4449}
+.frame-metrics{position:absolute;top:17px;left:50%;transform:translateX(-50%);z-index:1;
+ background:#0b2025c9;color:#cbefe1;border:1px solid #355d56;border-radius:7px;
+ padding:5px 10px;font-size:10px;letter-spacing:.3px;pointer-events:none;white-space:nowrap}
+.map-region .map-credit{max-width:35%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:820px){.frame-metrics{top:48px;left:50%;font-size:9px}.map-region .map-credit{max-width:55%}}

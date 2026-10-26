@@ -13,6 +13,7 @@
 <script src="../vendor/jszip.min.js" defer></script>
 <script src="./mapdata.js" defer></script>
 <script src="./vegetation.js" defer></script>
+<script src="./advanced.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
@@ -29,6 +30,10 @@
   <label class="file-button" for="image-file"><span>▧</span> Load satellite image <small>PNG, JPG or WebP</small></label>
   <input id="image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
   <div class="data-state" id="image-status">No image loaded. Use imagery you have permission to use.</div>
+  <label class="file-button secondary" for="tile-file"><span>▦</span> Load higher-resolution map tiles <small>ZedForge tile-pack ZIP • optional</small></label>
+  <input id="tile-file" type="file" accept=".zip,application/zip" hidden>
+  <div class="data-state" id="tile-status">No high-resolution tiles • base satellite remains visible</div>
+  <div class="button-row"><button id="clear-tiles" class="subtle">Clear loaded tiles</button></div>
   <div id="source-quality" class="source-quality" role="status">Load a satellite image to inspect its native resolution.</div>
   <label class="toggle" for="remember-image"><input id="remember-image" type="checkbox" checked> Remember image locally <span>private to this browser</span></label>
   <div class="button-row storage-line"><button id="forget-image" class="secondary">Forget saved image</button><span id="local-storage-status" class="data-state">Checking local storage…</span></div>
@@ -47,6 +52,12 @@
   <label class="file-button secondary" for="events-file"><span>⌖</span> Add spawn overlay <small>cfgeventspawns.xml • optional</small></label>
   <input id="events-file" type="file" accept=".xml,text/xml,application/xml" hidden>
   <div class="data-state" id="events-status">No event positions loaded</div>
+  <label class="file-button secondary" for="poi-file"><span>⌖</span> Import place names / locations <small>CSV or GeoJSON • towns, military, fuel, landmarks</small></label>
+  <input id="poi-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
+  <div class="data-state" id="poi-status">No verified POI locations imported</div>
+  <label class="file-button secondary" for="trees-file"><span>♣</span> Import actual vegetation points <small>CSV / GeoJSON with game X/Z positions</small></label>
+  <input id="trees-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
+  <div class="data-state" id="trees-status">No tree-position dataset imported • colour enhancement still available</div>
  </section>
  <section class="group">
   <h2><span>02</span> Layers</h2>
@@ -58,8 +69,14 @@
   <label class="toggle"><input id="show-grid" type="checkbox"> Coordinate grid</label>
   <label class="toggle"><input id="show-overview" type="checkbox" checked> Overview navigator</label>
   <label class="toggle"><input id="show-markers" type="checkbox" checked> My markers</label>
+  <label class="toggle"><input id="show-pois" type="checkbox" checked> Towns, places and POI labels</label>
+  <label class="toggle"><input id="show-trees" type="checkbox" checked> Verified trees <span>only if imported</span></label>
   <label class="field" for="event-filter">Event filter</label>
   <select id="event-filter"><option value="all">All events</option></select>
+  <label class="field" for="poi-search">Find a mapped location</label>
+  <input id="poi-search" type="search" placeholder="Town, airfield, military…" autocomplete="off">
+  <select id="poi-results" class="poi-results" size="4" aria-label="Matching map locations"></select>
+  <div class="data-state" id="poi-search-status">Import a named location file to search.</div>
   <label class="field" for="satellite-tone">Satellite appearance</label>
   <select id="satellite-tone"><option value="natural">Natural colours</option><option value="vivid">Enhanced detail</option><option value="lowlight">Darkened tactical</option></select>
   <label class="field" for="overlay-alpha">Overlay strength <output id="overlay-alpha-value">85%</output></label>
@@ -86,6 +103,13 @@
   <div class="section-label">DISTANCE MEASUREMENT</div>
   <div class="button-row"><button id="measure-toggle" class="secondary">Measure distance</button><button id="measure-reset" class="secondary">Clear measurement</button></div>
   <div class="data-state" id="measure-status">Measure the distance between two map locations in metres.</div>
+  <div class="tool-divider"></div>
+  <div class="section-label">LANDMARK COORDINATE ALIGNMENT</div>
+  <p class="hint">Compare known world X/Z positions with pixel positions in the source satellite. Only apply an offset supported by your own verified reference points.</p>
+  <label class="file-button secondary" for="calibration-file">Load landmark checks <small>CSV: name,x,z,pixelX,pixelY</small></label>
+  <input id="calibration-file" type="file" accept=".csv,text/csv" hidden>
+  <div id="calibration-status" class="data-state">No coordinate checks loaded; default world calibration stays unchanged.</div>
+  <div class="button-row"><button id="apply-calibration" class="secondary" disabled>Apply measured offset</button><button id="reset-calibration" class="subtle">Reset</button></div>
   <label class="field" for="marker-label">Marker label (optional)</label>
   <input type="text" id="marker-label" maxlength="60" placeholder="e.g. Trader, Vehicle spawn">
   <div id="marker-count" class="data-state">0 markers</div>
@@ -111,6 +135,7 @@
    <div class="map-corner"><strong>NASDARA</strong><span>16.384 km terrain extent</span></div>
    <div class="map-readout" id="cursor-readout">X — • Z —</div>
    <div class="map-credit" id="map-credit">Local imagery only • No imagery bundled</div>
+   <div class="frame-metrics" id="frame-metrics" aria-label="Map rendering performance">Rendering ready</div>
    <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-spawn"></i> Spawn</span></div>
    <div class="scale-widget"><div id="scale-label">1 km</div><div id="scale-line"></div></div>
    <div id="overview-panel" class="overview-panel"><canvas id="overview-canvas" width="180" height="180" aria-label="Map overview navigator" title="Click to jump to a location"></canvas><span>OVERVIEW</span></div>

@@ -1,4 +1,100 @@
-# Nasdara Map Lab — detailed terrain viewer (v0.3.3)
+# Nasdara Map Lab — consolidated mapping release (v0.4.0)
+
+**The ZedForge map is standalone. The World War Z website is not modified.**
+
+## New: one consolidated map upgrade
+
+This release adds **real data-driven place names and forests**, search/navigation,
+optional **multi-resolution satellite imagery**, landmark-alignment checks, and
+a cached minimap. Previous yellow paved roads, adjustable metre-based widths,
+building imagery and stability improvements remain unchanged.
+
+### Imported place labels and search
+
+Import a CSV or GeoJSON with verified **DayZ world X/Z**, not latitude/longitude.
+CSV needs at least `name,x,z`; an optional `category` can be `town`, `city`,
+`village`, `military`, `airfield`, `fuel`, `trader`, `landmark`, `medical`,
+`water`, `forest`, or `other`. Example CSV:
+
+```csv
+name,x,z,category
+Example Location,8192,8192,landmark
+```
+
+The example is a *format demonstration*, **not a real Nasdara landmark**.
+Valid imported names are drawn with collision-aware map labels. The sidebar
+search finds an imported location and jumps to its exact world coordinates.
+
+### Real tree locations (optional)
+
+Import CSV `name,x,z` or GeoJSON Point features from a legitimate tree
+position dataset. This uses actual supplied X/Z anchors and zoom-dependent
+dot rendering with spatial viewport culling. Tree-position files are **not
+included or invented**. The existing satellite-based vegetation enhancement
+is independent and still available.
+
+### Higher-resolution satellite tile packs
+
+The browser supports an optional user-created tile ZIP:
+- ZIP root: `zedforge-tiles.json` with
+  `{"format":"zedforge-tiles-v1","worldSize":16384,"tiles":[...]}`.
+- Each tile: `{"path":"tiles/l4/000_000.jpg","x":0,"z":15360,"width":1024,"height":1024,"level":4}`
+  where X/Z/width/height are *world metres* and origin is south-west.
+- Images are loaded and decoded **only for the current viewport**, limited
+  to three concurrent decodes and a 144 MiB decoded-image cache.
+- The existing satellite remains as fallback; the tile pack is **optional**.
+
+A local tile-pack builder is included at `tools/build_nasdara_tiles.py`.
+On a machine with Python and Pillow installed, use:
+
+```sh
+python -m pip install Pillow
+python tools/build_nasdara_tiles.py nasdara-highres.png Nasdara_HD_Tiles.zip
+```
+
+Use a **lawfully obtained north-up full-world satellite image**. The script
+generates levels from an existing image; it cannot manufacture image detail
+beyond its source or provide proprietary game assets. ZIP files must be
+250 MB or smaller and contain at most 1,800 tiles. Browsers may have tighter
+local storage limits. The map also supports a tile-only overview if no
+base image is loaded.
+
+### Landmark coordinate verification
+
+Import a CSV with columns `name,x,z,pixelX,pixelY`. For at least two
+verified landmarks, Map Lab computes the median image translation (metres)
+and residual RMS error. **The offset can be applied only when the RMS
+is 20 metres or less and each offset component is within 500 metres**.
+
+Only the satellite imagery is shifted. Road geometry, buildings, markers,
+town labels and game coordinates remain in original world X/Z. If image
+rotation, cropping or scale is wrong, a simple translation is insufficient:
+a high residual error blocks automatically applying it. Reset restores
+default calibration. *No landmark coordinates are presumed correct without
+external ground truth.*
+
+### Performance and regression
+
+- The overview uses a **cached 180 px satellite thumbnail** instead of
+  continuously downscaling a 4096 px image during movement.
+- Spatial cell indexing culls tree and place positions outside the viewport.
+- Collision-aware labels cap drawing to 90 names per frame.
+- Tile decoding is lazy, concurrent-limited and LRU-bounded.
+- A compact draw-time/loaded-tile/visible-roof status is shown in-map.
+- Existing building work remains batched off-screen and road strokes remain
+  width-calibrated and stable.
+
+### Dataset and licensing limitations
+
+Native `nasdara.roads` has only paved/dirt classes, **not a verified
+major/minor road hierarchy**. ZedForge does not fabricate town names, tree
+coordinates or high-resolution textures. A truly sharper image or authentic
+named/vegetation layer still requires an appropriate external source with
+rights to use it.
+
+---
+
+## Previous map improvements
 
 **[Launch Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/)**
 
@@ -132,6 +228,8 @@ node map-lab/mapdata.test.cjs
 node map-lab/road-stability.test.cjs
 node map-lab/building-stability.test.cjs
 node map-lab/vegetation.test.cjs
+node map-lab/advanced.test.cjs
+node map-lab/advanced-integration.test.cjs
 ```
 
 Large-volume synthetic stress checks were also performed at the reference record counts. Browser testing with actual independently published files and terrain data is still required before treating visual quality or exact alignment as verified.

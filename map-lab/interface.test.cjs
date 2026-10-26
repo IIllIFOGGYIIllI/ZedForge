@@ -4,12 +4,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
 check('All JavaScript sources are local and present',()=>{
- assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('../vendor/jszip.min.js'));
+ assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('../vendor/jszip.min.js'));
  assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
  for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
 });
@@ -124,6 +124,38 @@ check('Changing close-up road width avoids expensive overview layer rebuilding',
  assert(!line[0].includes('rebuildRoadOverview'));
  assert(line[0].includes('schedule();saveView()'));
  assert(mapdata.includes('outerWidth:overview?1.75:pavedOuter'));
+});
+
+
+check('Consolidated POI, forest, satellite tiles and alignment controls exist',()=>{
+ for(const id of ['tile-file','tile-status','clear-tiles','poi-file','trees-file','poi-search','poi-results','poi-search-status',
+    'show-pois','show-trees','calibration-file','calibration-status','apply-calibration','reset-calibration','frame-metrics']){
+  assert(html.includes('id="'+id+'"'),'Missing '+id);
+ }
+ assert(advanced.includes('parseTileManifest'));
+ assert(advanced.includes('parseCalibration'));
+});
+check('Map drawing order preserves existing roads and structures',()=>{
+ assert(app.includes('drawImage();drawTiles()'));
+ assert(app.includes('drawRoads();drawStructures();drawTrees();drawEvents();drawLocations()'));
+ assert(app.includes('metrics(start)'));
+ assert(app.includes('PICTURE_BUDGET=192*1024*1024'));
+});
+check('Optional imported map data is locally saved and restored',()=>{
+ for(const name of ["cache.read('pois')","cache.read('trees')","cache.read('tilepack')",
+    "cacheLayer('tilepack'","cacheLayer(type==='trees'?'trees':'pois'"])
+  assert(app.includes(name),name);
+ assert(app.includes("state.calibration={dx:result.dx,dz:result.dz}"));
+});
+check('Detailed raster overlays do not downgrade the base map at overview zoom',()=>{
+ assert(app.includes('state.image&&tile.level===0'));
+ assert(app.includes('TILE_BUDGET=144*1024*1024'));
+ assert(app.includes('MAX_TILE_IMAGES=110'));
+});
+check('Minimap draws from cached thumbnail rather than decoding satellite every frame',()=>{
+ assert(app.includes('let overviewThumb=null'));
+ assert(app.includes('if(!overviewThumb)'));
+ assert(app.includes('painter.drawImage(state.image,0,0,w,h)'));
 });
 
 console.log('\n'+passed+' Map Lab interface checks passed.');
