@@ -4,12 +4,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),places=load('places.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),places=load('places.js'),services=load('services.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
 check('All JavaScript sources are local and present',()=>{
- assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('./places.js'));assert(scripts.includes('../vendor/jszip.min.js'));
+ assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('./places.js'));assert(scripts.includes('./services.js'));assert(scripts.includes('../vendor/jszip.min.js'));
  assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
  for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
 });
@@ -137,7 +137,7 @@ check('Consolidated POI, forest, satellite tiles and alignment controls exist',(
 });
 check('Map drawing order preserves existing roads and structures',()=>{
  assert(app.includes('drawImage();drawTiles()'));
- assert(app.includes('drawRoads();drawStructures();drawTrees();drawEvents();drawLocations()'));
+ assert(app.includes('drawRoads();drawStructures();drawTrees();drawEvents();drawLocations();drawServices()'));
  assert(app.includes('metrics(start)'));
  assert(app.includes('PICTURE_BUDGET=192*1024*1024'));
 });
@@ -195,6 +195,52 @@ check('Dynamic events are hidden until their distinct icon system is ready',()=>
  assert(html.includes('id="show-spawns" type="checkbox" disabled'));
  assert(html.includes('for="events-file" hidden'));
  assert(!app.includes("['show-spawns','spawns'],['show-grid','grid']"));
+});
+
+
+check('Official fixed facilities are locally bundled and source-attributed',()=>{
+ assert(services.includes('ZedForgeServices'));
+ assert(services.includes('44b32f032cc85b8ffdde94deda70b455d3fc94bb'));
+ assert(services.includes("Water tower structure; drinking-water access is not guaranteed"));
+ assert(html.includes('115 verified positions'));
+ assert(html.includes('src="./services.js"'));
+ assert(app.includes('serviceIndex:A.groupPoints(S?.points||[])'));
+});
+check('Seven facility types have vector map glyphs, hover details and click selection',()=>{
+ for(const token of ['function drawFacilityGlyph','function drawServices','function hitService','function updateServiceTooltip',
+    'function facilityVisible','ctx.fillRect(x-1.6,y-5,3.2,10)','site.name'])
+  assert(app.includes(token),'Missing '+token);
+ assert(html.includes('id="service-tooltip"'));
+ assert(css.includes('.service-tooltip[hidden]'));
+});
+check('Permanent buildings can be filtered without changing town labels or events',()=>{
+ for(const id of ['show-services','show-fuel','show-medical','show-emergency','show-water-facilities','show-infrastructure'])
+  assert(html.includes('id="'+id+'"'),'Missing toggle '+id);
+ assert(app.includes("['show-services','showServices']"));
+ assert(app.includes("['show-water-facilities','waterFacilities']"));
+ assert(app.includes('showSpawns:false'));
+ assert(html.includes('id="show-spawns" type="checkbox" disabled'));
+});
+check('Search includes both named places and native static buildings',()=>{
+ assert(app.includes("state.searchResults=[...named,...staticSites]"));
+ assert(app.includes("A.searchPoints(facilities,search,26)"));
+ assert(app.includes("loc.permanent?7:4"));
+ assert(app.includes("state.selected={x:loc.x,z:loc.z}"));
+});
+check('Map product copy no longer calls the working map a prototype',()=>{
+ assert(!html.includes('Satellite map prototype'));
+ assert(!html.includes('EXPERIMENTAL • LOCAL ONLY'));
+ assert(html.includes('Nasdara interactive map'));
+});
+
+
+check('Known model trees load automatically with a matching structure dataset',()=>{
+ assert(advanced.includes('function extractKnownStructureTrees'));
+ assert(advanced.includes('misc_tree_pavement1/2/3'));
+ assert(app.includes('A.extractKnownStructureTrees(structures)'));
+ assert(app.includes('function updateTreeLayer()'));
+ assert(app.includes('state.nativeTreePoints,...state.manualTreePoints'));
+ assert(html.includes('auto-detect if available'));
 });
 
 console.log('\n'+passed+' Map Lab interface checks passed.');

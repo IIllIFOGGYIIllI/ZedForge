@@ -4,14 +4,14 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
-const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js');
+const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js'),SV=require('./services.js');
 async function main(){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
  const listeners=[],frames=[],labelStrokes=[];
  const ctx={
   save(){},restore(){},fillRect(){},strokeRect(){},clearRect(){},setTransform(){},
   beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},fillText(){},strokeText(...args){labelStrokes.push(args)},
-  arc(){},setLineDash(){},drawImage(){},scale(){},translate(){},transform(){},
+  arc(){},closePath(){},setLineDash(){},drawImage(){},scale(){},translate(){},transform(){},
   measureText:txt=>({width:txt.length*7})
  };
  function node(id){
@@ -48,7 +48,7 @@ async function main(){
  };
  const win={
   ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeVegetation:{makeOverlay:()=>({canvas:node('mask')})},
-  ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeMapStorage:storage,
+  ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeServices:SV,ZedForgeMapStorage:storage,
   JSZip:{loadAsync:async()=>zip},
   addEventListener(type,fn){listeners.push({id:'window',type,fn})}
  };
@@ -77,6 +77,25 @@ async function main(){
  console.log('PASS map typography draws unboxed city text in corrected north-south order');
  assert(elements.get('show-military').checked);
  console.log('PASS all 78 named Nasdara locations are searchable on first load');
+ assert.equal(SV.count,115);
+ elements.get('poi-search').value='Fuel station';
+ elements.get('poi-search').oninput();
+ assert.equal(elements.get('poi-results').options.length,22);
+ console.log('PASS 115 permanent source-verified facilities are searchable without user imports');
+ assert(elements.get('show-fuel').checked);
+ assert(elements.get('show-medical').checked);
+ assert(elements.get('show-water-facilities').checked);
+ elements.get('poi-results').onchange({target:{value:'0'}});
+ flush();
+ const facility=SV.points.find(x=>x.kind==='fuel');
+ assert(elements.get('selected-readout').textContent.includes('Fuel station'));
+ assert(elements.get('selected-readout').textContent.includes('X '));
+ console.log('PASS selecting a permanent facility jumps to its exact game coordinates');
+ handler('map-canvas','pointermove')({clientX:550,clientY:335,button:0});
+ assert(elements.get('service-tooltip').textContent.includes('Fuel station'),
+   'Hovering over a facility should show its actual building');
+ assert.equal(elements.get('service-tooltip').hidden,false);
+ console.log('PASS facility symbols reveal hover details at close zoom');
  const satellite={name:'nasdara.png',type:'image/png',size:10000};
  await handler('image-file')({target:{files:[satellite],value:'nasdara.png'}});
  flush();
@@ -95,7 +114,7 @@ async function main(){
    geometry:{type:'Point',coordinates:[1234,5678]}}]})};
  await handler('trees-file')({target:{files:[trees],value:'trees.geojson'}});
  flush();
- assert(elements.get('trees-status').textContent.includes('1 verified'));
+ assert(elements.get('trees-status').textContent.includes('1 mapped'));
  assert.equal(elements.get('show-trees').checked,true);
  console.log('PASS real tree points load as spatially culled optional layer');
  const landmarks={name:'checks.csv',size:200,text:async()=>
@@ -117,6 +136,6 @@ async function main(){
  console.log('PASS multi-resolution ZIP manifest loads without a server or remote requests');
  assert(!source.includes('fetch('));
  console.log('PASS all new imports are local-only');
- console.log('8 advanced integration checks passed.');
+ console.log('11 advanced integration checks passed.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

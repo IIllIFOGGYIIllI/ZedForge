@@ -1,6 +1,53 @@
-# Nasdara Map Lab — corrected geography and typography (v0.4.2)
+# Nasdara interactive map — permanent facility release (v0.5.0)
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
+
+## Built-in permanent facilities (v0.5.0)
+
+The map now loads **115 permanent facility positions** automatically from
+Bohemia Interactive's public Nasdara central-economy mission file
+[`mapgrouppos.xml`](https://github.com/BohemiaInteractive/DayZ-Central-Economy/blob/master/dayzOffline.nasdara/mapgrouppos.xml),
+in addition to the existing 78 built-in place names. Facilities are real
+fixed buildings, using original in-game metre coordinates; **not estimated
+map squares, event locations or active resource reports**.
+
+- **22** fuel-station structures (fuel availability not guaranteed)
+- **28** clinics / hospitals
+- **19** police stations
+- **11** fire stations
+- **28** water towers (potable water access not guaranteed)
+- **6** vehicle repair centres
+- **1** radio building
+
+122 individual official model positions were screened; seven duplicate
+fuel-site structures within 45 metres were merged into a single icon.
+This derived coordinate index does not reproduce the source mission XML.
+The source snapshot is Git blob
+`44b32f032cc85b8ffdde94deda70b455d3fc94bb`.
+
+The source positions are drawn in a **separate map layer** with
+category-specific vector facility icons, selectable world coordinates,
+hover information, search-by-type and independent layer filters. They
+are displayed only at close enough zoom to avoid cluttering the
+regional map; category filters and place-name labels are unaffected.
+
+Events, crashes, convoys and vehicle spawn points are intentionally
+hidden until a proper event icon system is available, as requested.
+
+Individual pavement-tree positions are also recovered automatically when
+the imported structure file exactly matches the known `DVMOBJ1` source
+(1,697 models and 295,195 placements). The source classes
+`misc_tree_pavement1/2/3` have model indices 915–917 in the
+[reference model manifest](https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/objects/nasdara/source.json).
+This reads the same local structure file without another upload.
+Unknown model versions are deliberately not guessed. These represent
+**actual individual pavement-tree props**, not the entire forest canopy.
+
+The satellite and roof artwork still come from user-owned/imported
+assets. No licensed third-party map images are redistributed or
+manufactured to pretend that a 4096-pixel satellite image has more
+genuine terrain detail. The existing high-resolution tile-pack support
+remains available for lawful, higher-resolution source images.
 
 ## Corrected map-grid orientation and map typography (v0.4.2)
 
@@ -284,6 +331,7 @@ node map-lab/building-stability.test.cjs
 node map-lab/vegetation.test.cjs
 node map-lab/advanced.test.cjs
 node map-lab/places.test.cjs
+node map-lab/services.test.cjs
 node map-lab/advanced-integration.test.cjs
 ```
 

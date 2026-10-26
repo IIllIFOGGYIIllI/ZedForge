@@ -134,5 +134,33 @@
    const desired=Math.min(maxLevel,Math.max(0,Math.floor(Math.log2(Math.max(1,zoom)))));
    return candidates.filter(t=>t.level<=desired).sort((a,b)=>a.level-b.level).slice(0,limit);
  }
- return{EXTENT,parseCSV,parsePoints,groupPoints,visiblePoints,searchPoints,parseCalibration,parseTileManifest,selectTiles};
+  /*
+   * Tree locations available in the reference DVMOBJ1 Nasdara structure
+   * file: "misc_tree_pavement1/2/3" at model indices 915–917.
+   *
+   * Model index evidence:
+   * https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/objects/nasdara/source.json
+   *
+   * Only accept the known 1,697-model / 295,195-placement 2026 release.
+   * Another version can shift model IDs, so never guess tree locations.
+   * This captures real pavement-tree props, NOT a complete forest survey.
+   */
+  function extractKnownStructureTrees(layer){
+    if(!layer||layer.format!=='dvmobj1'||layer.modelCount!==1697||
+       layer.count!==295195||!Array.isArray(layer.placements)||
+       !layer.coordinates||layer.coordinates.length!==layer.count*4)
+      return{compatible:false,points:[]};
+    const known=new Set([915,916,917]),points=[];
+    for(let i=0;i<layer.count;i++){
+      const p=layer.placements[i];if(!p||!known.has(p.model))continue;
+      const x=layer.coordinates[i*4],z=layer.coordinates[i*4+1];
+      if(!valid(x)||!valid(z))continue;
+      points.push({x,z,kind:'tree',name:'Mapped pavement tree',
+        model:'misc_tree_pavement'+(p.model-914),
+        source:'known-dvmobj1-1792185360',permanent:true});
+      if(points.length>50000)throw Error('Unexpected tree count in structures');
+    }
+    return{compatible:true,points};
+  }
+ return{EXTENT,parseCSV,parsePoints,groupPoints,visiblePoints,searchPoints,parseCalibration,parseTileManifest,selectTiles,extractKnownStructureTrees};
 });

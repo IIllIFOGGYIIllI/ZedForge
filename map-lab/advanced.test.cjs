@@ -77,4 +77,22 @@ check('Tile LOD selects suitable zoom and only visible coverage',()=>{
  assert.deepEqual(A.selectTiles(tiles,view,2).map(x=>x.path),['overview.jpg']);
  assert.deepEqual(A.selectTiles(tiles,view,16).map(x=>x.path),['overview.jpg','detail.jpg']);
 });
+
+check('Known Nasdara static structure models yield true tree coordinates',()=>{
+ const count=295195,modelCount=1697;
+ const placements=new Array(count).fill({model:10}),coordinates=new Float32Array(count*4);
+ placements[12]={model:915};coordinates[12*4]=8300;coordinates[12*4+1]=10500;
+ placements[24]={model:917};coordinates[24*4]=8305;coordinates[24*4+1]=10510;
+ const result=A.extractKnownStructureTrees({format:'dvmobj1',modelCount,count,placements,coordinates});
+ assert(result.compatible);assert.equal(result.points.length,2);
+ assert.deepEqual(result.points.map(p=>[p.x,p.z,p.model]),[
+  [8300,10500,'misc_tree_pavement1'],[8305,10510,'misc_tree_pavement3']
+ ]);
+});
+check('Unknown structure releases do not fabricate tree points',()=>{
+ const result=A.extractKnownStructureTrees({format:'dvmobj1',modelCount:1696,
+   count:295195,placements:[],coordinates:new Float32Array(0)});
+ assert.equal(result.compatible,false);assert.deepEqual(result.points,[]);
+});
+
 console.log(passed+' advanced mapping tests passed.');

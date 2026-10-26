@@ -79,3 +79,14 @@
 .map-legend .legend-city{background:#d0f8e5}
 .map-legend .legend-military{background:#ffb998}
 label[hidden],select[hidden],div[hidden]{display:none!important}
+
+/* Permanent facilities: compact map symbols and hover information. */
+.map-legend .legend-service{background:#f4d797}
+.service-tooltip{
+ position:absolute;z-index:7;min-width:175px;max-width:275px;
+ padding:9px 11px;border:1px solid #60766e;border-radius:8px;
+ background:#0e2525f0;color:#f1f8ee;font-size:12px;line-height:1.45;
+ pointer-events:none;box-shadow:0 8px 24px #051212aa;
+}
+.service-tooltip[hidden]{display:none!important}
+#show-services,#show-fuel,#show-medical,#show-emergency,#show-water-facilities,#show-infrastructure{accent-color:var(--accent)}

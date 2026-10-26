@@ -15,17 +15,18 @@
 <script src="./vegetation.js" defer></script>
 <script src="./advanced.js" defer></script>
 <script src="./places.js" defer></script>
+<script src="./services.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
 <div class="shell">
 <header class="topbar">
  <div class="brand"><img src="../assets/logo.svg" alt=""><div><strong>ZedForge</strong><small>MAP LAB / NASDARA</small></div></div>
- <div class="topright"><span class="state-pill">EXPERIMENTAL • LOCAL ONLY</span><a href="../" class="backlink">← Back to ZedForge</a></div>
+ <div class="topright"><span class="state-pill">NASDARA • LOCAL MAP</span><a href="../" class="backlink">← Back to ZedForge</a></div>
 </header>
 <div class="workspace">
 <aside class="sidebar">
- <div class="head"><div class="eyebrow">NASDARA / BADLANDS</div><h1>Satellite map prototype</h1><p>Real terrain imagery, exact world coordinates, optional roads and event spawns. No paper map, no third-party tile scraping.</p></div>
+ <div class="head"><div class="eyebrow">NASDARA / BADLANDS</div><h1>Nasdara interactive map</h1><p>Satellite terrain, calibrated world coordinates, roads, buildings, permanent places and facilities. Your imagery and settings stay on this device.</p></div>
  <section class="group">
   <h2><span>01</span> Imagery & data</h2>
   <label class="file-button" for="image-file"><span>▧</span> Load satellite image <small>PNG, JPG or WebP</small></label>
@@ -57,9 +58,9 @@
   <input id="poi-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
   <div class="data-state" id="poi-status">78 named Nasdara locations included • approximate 100 m grid positions</div>
   <p class="hint source-tip">Included: cities, towns, villages, industrial sites, airfield and military installations. Coordinates are grid-square centres (not exact doorways). <a class="reference-link" href="https://www.nasdaramap.com/guide" target="_blank" rel="noopener noreferrer">Location source</a></p>
-  <label class="file-button secondary" for="trees-file"><span>♣</span> Import actual vegetation points <small>CSV / GeoJSON with game X/Z positions</small></label>
+  <label class="file-button secondary" for="trees-file"><span>♣</span> Import additional tree positions <small>CSV / GeoJSON • optional game X/Z</small></label>
   <input id="trees-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
-  <div class="data-state" id="trees-status">No tree-position dataset imported • colour enhancement still available</div>
+  <div class="data-state" id="trees-status">Pavement-tree positions detected automatically from compatible building data; full forest positions require terrain data.</div>
  </section>
  <section class="group">
   <h2><span>02</span> Layers</h2>
@@ -75,11 +76,19 @@
   <label class="toggle sub-toggle"><input id="show-villages" type="checkbox" checked> Villages</label>
   <label class="toggle sub-toggle"><input id="show-military" type="checkbox" checked> Military installations</label>
   <label class="toggle sub-toggle"><input id="show-industry" type="checkbox" checked> Industry and airfields</label>
-  <label class="toggle"><input id="show-trees" type="checkbox" checked> Verified trees <span>only if imported</span></label>
+  <div class="tool-divider"></div>
+  <label class="toggle"><input id="show-services" type="checkbox" checked> Permanent facilities <span>115 verified positions</span></label>
+  <label class="toggle sub-toggle"><input id="show-fuel" type="checkbox" checked> Fuel stations <span>22</span></label>
+  <label class="toggle sub-toggle"><input id="show-medical" type="checkbox" checked> Medical facilities <span>28</span></label>
+  <label class="toggle sub-toggle"><input id="show-emergency" type="checkbox" checked> Police and fire <span>30</span></label>
+  <label class="toggle sub-toggle"><input id="show-water-facilities" type="checkbox" checked> Water towers <span>28</span></label>
+  <label class="toggle sub-toggle"><input id="show-infrastructure" type="checkbox" checked> Repair and radio <span>7</span></label>
+  <p class="hint">Fixed buildings from the official Nasdara mission. Symbols appear as you zoom in. Fuel and potable water availability are not guaranteed.</p>
+  <label class="toggle"><input id="show-trees" type="checkbox" checked> Individual trees <span>auto-detect if available</span></label>
   <label class="field" for="event-filter" hidden>Event filter</label>
   <select id="event-filter" hidden><option value="all">All events</option></select>
   <label class="field" for="poi-search">Find a mapped location</label>
-  <input id="poi-search" type="search" placeholder="Town, airfield, military…" autocomplete="off">
+  <input id="poi-search" type="search" placeholder="Town, fuel, hospital, police…" autocomplete="off">
   <select id="poi-results" class="poi-results" size="4" aria-label="Matching map locations"></select>
   <div class="data-state" id="poi-search-status">78 permanent Nasdara locations ready • type to search</div>
   <label class="field" for="satellite-tone">Satellite appearance</label>
@@ -140,8 +149,9 @@
    <div class="map-corner"><strong>NASDARA</strong><span>16.384 km terrain extent</span></div>
    <div class="map-readout" id="cursor-readout">X — • Z —</div>
    <div class="map-credit" id="map-credit">Local imagery only • No imagery bundled</div>
+   <div id="service-tooltip" class="service-tooltip" hidden></div>
    <div class="frame-metrics" id="frame-metrics" aria-label="Map rendering performance">Rendering ready</div>
-   <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-city"></i> Places</span><span><i class="legend-military"></i> Military</span></div>
+   <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-city"></i> Places</span><span><i class="legend-service"></i> Facilities</span></div>
    <div class="scale-widget"><div id="scale-label">1 km</div><div id="scale-line"></div></div>
    <div id="overview-panel" class="overview-panel"><canvas id="overview-canvas" width="180" height="180" aria-label="Map overview navigator" title="Click to jump to a location"></canvas><span>OVERVIEW</span></div>
    <div id="map-layer-count" class="layer-info" role="status">Satellite image only • Load actual roads and buildings for detail</div>

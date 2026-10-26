@@ -1,12 +1,12 @@
 'use strict';
 /* ZedForge Map Lab — browser-only Nasdara prototype; no proprietary map assets shipped. */
 (() => {
-  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced,PL=window.ZedForgePlaces;
+  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced,PL=window.ZedForgePlaces,S=window.ZedForgeServices;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
     markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:false,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0},poiIndex:A.groupPoints(PL?.points||[]),treeIndex:null,showPois:true,showVillages:true,showMilitary:true,showIndustry:true,showTrees:false,calibration:{dx:0,dz:0},candidateCalibration:null};
+    roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0},poiIndex:A.groupPoints(PL?.points||[]),serviceIndex:A.groupPoints(S?.points||[]),serviceHits:[],searchResults:[],treeIndex:null,nativeTreePoints:[],manualTreePoints:[],showServices:true,showFuel:true,showMedical:true,showEmergency:true,showWaterFacilities:true,showInfrastructure:true,showPois:true,showVillages:true,showMilitary:true,showIndustry:true,showTrees:true,calibration:{dx:0,dz:0},candidateCalibration:null};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
 
   /*
@@ -155,6 +155,121 @@
       ctx.drawImage(image,tl.x,tl.y,br.x-tl.x,br.y-tl.y);
     }
   }
+  /* Fixed service structures, derived from official mission world X/Z.
+   * These are NOT dynamic events and do not assert working fuel/water.
+   * Draw category-specific vector symbols without bitmap/font dependencies.
+   */
+  const FACILITY_COLOURS={
+    fuel:'#f0c064',medical:'#f0a0ab',police:'#9fc9f8',
+    fire:'#f5a178',watertower:'#8de3f4',repair:'#b0e0ad',radio:'#d4b5ed'
+  };
+  function facilityVisible(kind){
+    if(!state.showServices)return false;
+    if(kind==='fuel')return state.showFuel;
+    if(kind==='medical')return state.showMedical;
+    if(kind==='police'||kind==='fire')return state.showEmergency;
+    if(kind==='watertower')return state.showWaterFacilities;
+    return state.showInfrastructure;
+  }
+  function drawFacilityGlyph(x,y,kind){
+    ctx.save();
+    ctx.lineWidth=1.5;ctx.strokeStyle='#1b302e';ctx.fillStyle='#1b302e';
+    if(kind==='fuel'){
+      ctx.fillRect(x-3.7,y-4.1,5.4,8.3);
+      ctx.fillStyle='#f7ebc7';ctx.fillRect(x-2.5,y-2.6,3,2.8);
+      ctx.strokeStyle='#1b302e';ctx.beginPath();
+      ctx.moveTo(x+1.5,y-1.9);ctx.lineTo(x+3.8,y-.1);ctx.lineTo(x+3.8,y+3.5);ctx.stroke();
+    }else if(kind==='medical'){
+      ctx.fillRect(x-1.6,y-5,3.2,10);
+      ctx.fillRect(x-5,y-1.6,10,3.2);
+    }else if(kind==='police'){
+      ctx.beginPath();ctx.moveTo(x,y+5);
+      ctx.lineTo(x-4,y+1);ctx.lineTo(x-3.5,y-4);
+      ctx.lineTo(x+3.5,y-4);ctx.lineTo(x+4,y+1);
+      ctx.closePath();ctx.fill();
+    }else if(kind==='fire'){
+      ctx.beginPath();ctx.moveTo(x,y-5);
+      ctx.lineTo(x+3.7,y-.2);ctx.lineTo(x+2.7,y+4.1);
+      ctx.lineTo(x-2.7,y+4.1);ctx.lineTo(x-3.7,y-.2);
+      ctx.closePath();ctx.fill();
+      ctx.fillStyle='#f0d2ac';ctx.beginPath();ctx.arc(x,y+1.9,1.7,0,Math.PI*2);ctx.fill();
+    }else if(kind==='watertower'){
+      ctx.fillRect(x-4,y-3.5,8,3.6);
+      ctx.strokeStyle='#1b302e';ctx.beginPath();
+      ctx.moveTo(x-2.5,y);ctx.lineTo(x-3.5,y+5);
+      ctx.moveTo(x+2.5,y);ctx.lineTo(x+3.5,y+5);ctx.stroke();
+    }else if(kind==='repair'){
+      ctx.strokeStyle='#1b302e';ctx.lineWidth=2.4;ctx.beginPath();
+      ctx.moveTo(x-3.7,y+3.7);ctx.lineTo(x+2.8,y-2.8);ctx.stroke();
+      ctx.beginPath();ctx.arc(x+2.7,y-2.7,2.2,0,Math.PI*2);ctx.stroke();
+    }else if(kind==='radio'){
+      ctx.strokeStyle='#1b302e';ctx.lineWidth=1.35;ctx.beginPath();
+      ctx.moveTo(x,y-5);ctx.lineTo(x-4,y+5);ctx.lineTo(x+4,y+5);ctx.closePath();ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x-3,y);ctx.lineTo(x+3,y);ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawServices(){
+    state.serviceHits.length=0;
+    if(!state.showServices||state.camera.zoom<2.4||!state.serviceIndex)return;
+    const records=A.visiblePoints(state.serviceIndex,visibleExtent(),350);
+    const occupied=[];
+    ctx.save();
+    for(const p of records){
+      if(!facilityVisible(p.kind))continue;
+      const at=toS(p.x,p.z);
+      if(at.x<12||at.y<12||at.x>state.width-12||at.y>state.height-12)continue;
+      // Distinct buildings can cluster at small zoom; skip overlapping
+      // icons rather than drawing an unreadable cloud of symbols.
+      if(occupied.some(q=>Math.abs(q.x-at.x)<13&&Math.abs(q.y-at.y)<13))continue;
+      occupied.push(at);
+      ctx.beginPath();ctx.arc(at.x,at.y,8.5,0,Math.PI*2);
+      ctx.fillStyle='#f6f0dc';ctx.fill();
+      ctx.lineWidth=1.7;ctx.strokeStyle=FACILITY_COLOURS[p.kind]||'#b8d9c6';ctx.stroke();
+      drawFacilityGlyph(at.x,at.y,p.kind);
+      state.serviceHits.push({site:p,x:at.x,y:at.y});
+      if(state.serviceHits.length>=190)break;
+    }
+    ctx.restore();
+  }
+  function hitService(e){
+    if(!Number.isFinite(e?.clientX)||!Number.isFinite(e?.clientY))return null;
+    const mouse=pointerOffset(e);
+    let hit=null,best=13*13;
+    for(const item of state.serviceHits){
+      const distance=(item.x-mouse.x)**2+(item.y-mouse.y)**2;
+      if(distance<best){best=distance;hit=item.site}
+    }
+    return hit;
+  }
+  function updateServiceTooltip(e){
+    const tooltip=$('service-tooltip');if(!tooltip)return;
+    if(state.drag){tooltip.hidden=true;return}
+    const service=hitService(e);
+    if(!service){tooltip.hidden=true;return}
+    tooltip.textContent=service.name+' • X '+Math.round(service.x)+' / Z '+Math.round(service.z)+'\n'+service.note;
+    tooltip.style.whiteSpace='pre-line';
+    const mouse=pointerOffset(e);
+    tooltip.style.left=Math.max(5,Math.min(state.width-280,mouse.x+18))+'px';
+    tooltip.style.top=Math.max(5,Math.min(state.height-92,mouse.y+12))+'px';
+    tooltip.hidden=false;
+  }
+
+  /*
+   * The known Nasdara 2026 structure file contains three authentic
+   * pavement-tree model classes. Detect them as a side effect of the
+   * same building import, without a second user file.
+   * Do not mislabel all green satellite pixels as true object positions.
+   */
+  function updateTreeLayer(){
+    const total=state.nativeTreePoints.length+state.manualTreePoints.length;
+    state.treeIndex=total?A.groupPoints([...state.nativeTreePoints,...state.manualTreePoints]):null;
+    $('trees-status').textContent=total
+      ?total.toLocaleString()+' mapped individual tree positions • '+state.nativeTreePoints.length.toLocaleString()+
+        ' from matching structure models • '+state.manualTreePoints.length.toLocaleString()+' custom'
+      :'No exact tree placements yet • colour-based forest enhancement available';
+    schedule();
+  }
   function drawTrees(){
     if(!state.showTrees||!state.treeIndex||state.camera.zoom<4)return;
     const trees=A.visiblePoints(state.treeIndex,visibleExtent(),2800);
@@ -253,16 +368,24 @@
 
   function refreshPOISearch(){
     const target=$('poi-results');target.replaceChildren();
-    const index=state.poiIndex;
-    if(!index){$('poi-search-status').textContent='No places available.';return}
+    const places=state.poiIndex,facilities=state.serviceIndex;
     const search=$('poi-search').value.trim();
-    if(!search){$('poi-search-status').textContent=index.points.length.toLocaleString()+' searchable locations • enter a place name';return}
-    const matches=A.searchPoints(index,search,35);
-    for(const p of matches){
-      const option=new Option(p.name+' • '+p.kind+' • '+(p.approximate?'≈ grid '+p.grid:'X '+Math.round(p.x)+' / Z '+Math.round(p.z)),String(index.points.indexOf(p)));
-      target.add(option);
+    state.searchResults=[];
+    if(!search){
+      const placeCount=places?.points.length||0,serviceCount=facilities?.points.length||0;
+      $('poi-search-status').textContent=placeCount+' named places • '+serviceCount+' fixed facilities • enter a name or category';
+      return;
     }
-    $('poi-search-status').textContent=matches.length+' matches';
+    const named=A.searchPoints(places,search,29);
+    const staticSites=A.searchPoints(facilities,search,26);
+    state.searchResults=[...named,...staticSites].slice(0,40);
+    for(let i=0;i<state.searchResults.length;i++){
+      const p=state.searchResults[i],position=p.approximate?'≈ map grid '+p.grid:
+        'X '+Math.round(p.x)+' / Z '+Math.round(p.z);
+      target.add(new Option(p.name+' • '+position,String(i)));
+    }
+    $('poi-search-status').textContent=state.searchResults.length+' matches'+
+      (staticSites.length?' • static building positions from official game data':'');
   }
   function metrics(start){
     metricFrames++;metricTotal+=Date.now()-start;
@@ -369,7 +492,7 @@
       const session={
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
-          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees,villages:state.showVillages,military:state.showMilitary,industry:state.showIndustry},
+          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees,villages:state.showVillages,military:state.showMilitary,industry:state.showIndustry,services:state.showServices,fuel:state.showFuel,medical:state.showMedical,emergency:state.showEmergency,waterFacilities:state.showWaterFacilities,infrastructure:state.showInfrastructure},
         satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,roadWidthMeters:state.roadWidthMeters,vegetationDetail:state.vegetationDetail,calibration:state.calibration,
         filter:$('event-filter').value
       };
@@ -455,7 +578,7 @@
         }
         state.markers=Array.isArray(session.markers)?session.markers.filter(m=>m&&P.validateWorld(m.x,m.z)).slice(0,5000).map(m=>({x:m.x,z:m.z,label:typeof m.label==='string'?m.label.slice(0,60):''})):[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;
         state.selected=session.selected&&P.validateWorld(session.selected.x,session.selected.z)?session.selected:null;
-        for(const [id,key]of [['show-roads','roads'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees'],['show-villages','villages'],['show-military','military'],['show-industry','industry']]){
+        for(const [id,key]of [['show-roads','roads'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees'],['show-villages','villages'],['show-military','military'],['show-industry','industry'],['show-services','services'],['show-fuel','fuel'],['show-medical','medical'],['show-emergency','emergency'],['show-water-facilities','waterFacilities'],['show-infrastructure','infrastructure']]){
           if(typeof session.flags?.[key]==='boolean'){$(id).checked=session.flags[key];state['show'+key[0].toUpperCase()+key.slice(1)]=session.flags[key]}
         }
       }
@@ -483,8 +606,7 @@
         const list=A.parsePoints(pois.text,pois.format,'other');mergePermanentPlaces(list);
       }catch(e){notify('Location layer restore failed: '+e.message)}}
       if(trees?.text){try{
-        const list=A.parsePoints(trees.text,trees.format,'tree');state.treeIndex=A.groupPoints(list);
-        $('trees-status').textContent=list.length.toLocaleString()+' vegetation positions restored';
+        const list=A.parsePoints(trees.text,trees.format,'tree');state.manualTreePoints=list;updateTreeLayer();
       }catch(e){notify('Tree layer restore failed: '+e.message)}}
       if(roads?.blob instanceof Blob){
         try{await loadRoadLayer(roads.blob,{restored:true,name:roads.name});}catch(e){notify('Could not restore roads: '+e.message)}
@@ -618,6 +740,7 @@
     }
     // Event positions stay omitted until category-specific icons are implemented.
     if(state.poiIndex)parts.push(state.poiIndex.points.length.toLocaleString()+' named places');
+    if(state.serviceIndex)parts.push(state.serviceIndex.points.length.toLocaleString()+' permanent facilities');
     if(state.treeIndex)parts.push(state.treeIndex.points.length.toLocaleString()+' trees');
     if(tileRuntime.pack)parts.push(tileRuntime.pack.tiles.length.toLocaleString()+' HD tiles');
     const text=parts.length?parts.join(' • '):'Load roads and building geometry for sharper detail';if($('map-layer-count').textContent!==text)$('map-layer-count').textContent=text;
@@ -665,7 +788,7 @@
     const start=Date.now();
     ctx.setTransform(state.dpr,0,0,state.dpr,0,0);
     ctx.fillStyle='#0d1e26';ctx.fillRect(0,0,state.width,state.height);
-    drawImage();drawTiles();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawTrees();drawEvents();drawLocations();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo();metrics(start)
+    drawImage();drawTiles();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawTrees();drawEvents();drawLocations();drawServices();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo();metrics(start)
   }
   function setCamera(next){state.camera=next;updateZoom();schedule();invalidateStructures();saveView()}
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
@@ -681,7 +804,7 @@
   }
   canvas.addEventListener('pointerdown',mouseEvent);
   canvas.addEventListener('pointermove',e=>{
-    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);if(state.measuring&&state.measurement?.start)schedule();
+    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);updateServiceTooltip(e);if(state.measuring&&state.measurement?.start)schedule();
     if(!state.drag)return;
     const dx=e.clientX-state.drag.x,dy=e.clientY-state.drag.y;
     if(Math.hypot(e.clientX-state.pointerDown.clientX,e.clientY-state.pointerDown.clientY)>4)state.drag.moved=true;
@@ -704,12 +827,19 @@
           $('measure-status').textContent=km>=1000?(km/1000).toFixed(3)+' km':km.toFixed(1)+' m';
         }
       }else{
-        state.selected=p;coordsInSidebar(p);$('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z);if(e.shiftKey)addMarker(p);saveView()
+        const site=e.shiftKey?null:hitService(e),selection=site||p;
+        state.selected={x:selection.x,z:selection.z};coordsInSidebar(selection);
+        $('selected-readout').textContent=site
+          ?site.name+' • X '+fmt(site.x)+' • Z '+fmt(site.z)
+          :'Selected X '+fmt(p.x)+' • Z '+fmt(p.z);
+        if(e.shiftKey)addMarker(p);
+        saveView();
       }
     }}
     schedule()
   });
-  canvas.addEventListener('pointercancel',()=>{state.drag=null;region.classList.remove('dragging')});
+  canvas.addEventListener('pointercancel',()=>{state.drag=null;region.classList.remove('dragging');$('service-tooltip').hidden=true});
+  canvas.addEventListener('pointerleave',()=>{$('service-tooltip').hidden=true});
   canvas.addEventListener('wheel',e=>{e.preventDefault();const p=pointerOffset(e);const multiplier=e.deltaY<0?1.17:1/1.17;setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*multiplier,state.width,state.height))},{passive:false});
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('dblclick',e=>{
@@ -718,7 +848,7 @@
   $('zoom-in').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom*1.6,state.width,state.height));
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
-  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees'],['show-villages','showVillages'],['show-military','showMilitary'],['show-industry','showIndustry']]){
+  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees'],['show-villages','showVillages'],['show-military','showMilitary'],['show-industry','showIndustry'],['show-services','showServices'],['show-fuel','showFuel'],['show-medical','showMedical'],['show-emergency','showEmergency'],['show-water-facilities','showWaterFacilities'],['show-infrastructure','showInfrastructure']]){
     $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();if(key==='showStructures')invalidateStructures(0);schedule();saveView()}
   }
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
@@ -816,6 +946,10 @@
     await new Promise(done=>setTimeout(done,0));
     const structures=M.parseObjects(await file.arrayBuffer());
     state.objectLayer=structures;structureFront=null;invalidateStructures(0);
+    // The reference model indices must match BOTH schema counts.
+    const resolved=A.extractKnownStructureTrees(structures);
+    state.nativeTreePoints=resolved.points;
+    updateTreeLayer();
     $('objects-status').textContent=structures.count.toLocaleString()+' accurate building placements • '+structures.modelCount+' models • '+filename;
     if(!restored){interacted=true;void cacheLayer('buildings',{blob:file,name:filename},'buildings')}
     schedule();notify('Loaded '+structures.count.toLocaleString()+' calibrated structure placements');return structures;
@@ -846,8 +980,7 @@
     const list=A.parsePoints(text,format,type==='trees'?'tree':'other');
     const index=A.groupPoints(list);
     if(type==='trees'){
-      state.treeIndex=index;
-      $('trees-status').textContent=list.length.toLocaleString()+' verified tree / vegetation positions • '+file.name;
+      state.manualTreePoints=list;updateTreeLayer();
       state.showTrees=true;$('show-trees').checked=true;
     }else{
       mergePermanentPlaces(list);
@@ -867,11 +1000,15 @@
   });
   $('poi-search').oninput=refreshPOISearch;
   $('poi-results').onchange=e=>{
-    const index=Number(e.target.value),loc=state.poiIndex?.points[index];
-    if(loc){
-      state.selected={x:loc.x,z:loc.z};coordsInSidebar(loc);
-      setCamera(P.view(loc.x,loc.z,Math.max(4,state.camera.zoom)));
-      $('selected-readout').textContent=loc.name+' • '+(loc.approximate?'approx. 100 m grid '+loc.grid:'X '+fmt(loc.x)+' / Z '+fmt(loc.z));
+    const index=Number(e.target.value),loc=state.searchResults[index];
+    if(!loc)return;
+    state.selected={x:loc.x,z:loc.z};coordsInSidebar(loc);
+    setCamera(P.view(loc.x,loc.z,Math.max(loc.permanent?7:4,state.camera.zoom)));
+    $('selected-readout').textContent=loc.name+' • '+(loc.approximate
+      ?'approx. 100 m grid '+loc.grid
+      :'X '+fmt(loc.x)+' / Z '+fmt(loc.z));
+    if(loc.permanent){
+      state.showServices=true;$('show-services').checked=true;schedule();saveView();
     }
   };
   $('tile-file').addEventListener('change',async e=>{

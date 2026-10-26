@@ -5,7 +5,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=__dirname;
 const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
-const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js');
+const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js'),SV=require('./services.js');
 const originalPath=global.Path2D;
 global.Path2D=class{moveTo(){}lineTo(){}closePath(){}};
 async function main(){
@@ -33,7 +33,7 @@ async function main(){
  }}
  const nodes=new Map(ids.map(id=>[id,node(id)]));
  const document={getElementById:id=>nodes.get(id),createElement:()=>node('buffer'),body:node('body')};
- const window={ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeAdvanced:A,ZedForgePlaces:PL,
+ const window={ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeServices:SV,
    ZedForgeMapStorage:{read:async()=>null,write:async()=>{},remove:async()=>{}},
    addEventListener(type,fn){listeners.push({id:'window',type,fn})}};
  let nextTimerId=1;
