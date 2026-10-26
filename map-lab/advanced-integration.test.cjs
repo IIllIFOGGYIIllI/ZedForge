@@ -63,6 +63,25 @@ async function main(){
   assert(found,'Missing '+id+' '+type+' listener');return found.fn
  };
  await Promise.resolve();await Promise.resolve();flush();
+ // Pinch keeps the source world point fixed while fingers move; the released
+ // finger must not trigger an accidental selection.
+ const pinchDown=handler('map-canvas','pointerdown');
+ const pinchMove=handler('map-canvas','pointermove');
+ const pinchUp=handler('map-canvas','pointerup');
+ pinchDown({button:0,pointerId:11,clientX:500,clientY:300,shiftKey:false});
+ pinchDown({button:0,pointerId:12,clientX:700,clientY:300,shiftKey:false});
+ pinchMove({pointerId:12,clientX:820,clientY:300,button:0});
+ flush();
+ const pinchZoom=parseFloat(elements.get('zoom-label').textContent.slice(5));
+ assert(pinchZoom>1.4&&pinchZoom<2);
+ pinchUp({pointerId:12,clientX:820,clientY:300,button:0});
+ pinchUp({pointerId:11,clientX:500,clientY:300,button:0});
+ const wheelHandler=handler('map-canvas','wheel');
+ wheelHandler({clientX:600,clientY:320,deltaY:-8,deltaMode:0,preventDefault(){}});
+ flush();
+ const wheelZoom=parseFloat(elements.get('zoom-label').textContent.slice(5));
+ assert(wheelZoom>pinchZoom&&wheelZoom<pinchZoom*1.1,'Wheel zoom must be smooth, not a fixed 17% jump');
+ console.log('PASS two-finger pinch and small wheel movements zoom smoothly without false clicks');
  assert(elements.get('poi-status').textContent.includes('78 permanent Nasdara places ready'));
  elements.get('poi-search').value='Dashtabad';
  elements.get('poi-search').oninput();

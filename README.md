@@ -49,6 +49,14 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
+## Nasdara Map Lab v0.6.1 — smoother map navigation
+
+Map Lab supports anchored two-finger pinch zoom and pan on touchscreens.
+Scroll-wheel and trackpad zoom now scales proportionally to the incoming
+movement instead of jumping by a fixed 17% each event. Touch gesture release
+cannot select or add a marker accidentally. Source coordinates and offline
+layers are unchanged.
+
 ## Nasdara interactive map v0.6.0 — coordinate provenance
 
 This version distinguishes **78 approximate community 100 m map-grid centres**

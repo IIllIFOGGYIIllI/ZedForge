@@ -813,17 +813,51 @@
     state.selected={x:p.x,z:p.z};coordsInSidebar(p);setCamera(P.view(p.x,p.z,Math.max(2.5,state.camera.zoom)));
     $('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z)
   }
+  // Pointer tracking supports normal mouse dragging and two-finger touch gestures.
+  // Both fingers anchor one world point so pinch zoom does not displace landmarks.
+  const activePointers=new Map();
+  let pinchGesture=null;
+  function pinchPositions(){
+    if(activePointers.size<2)return null;
+    const [a,b]=[...activePointers.values()].slice(0,2);
+    const r=canvas.getBoundingClientRect();
+    return {x:(a.x+b.x)/2-r.left,y:(a.y+b.y)/2-r.top,
+      distance:Math.hypot(a.x-b.x,a.y-b.y)};
+  }
+  function beginPinch(){
+    const p=pinchPositions();
+    if(!p||p.distance<8)return;
+    pinchGesture={distance:p.distance,zoom:state.camera.zoom,
+      world:P.fromScreen(p.x,p.y,state.camera,state.width,state.height)};
+    state.drag=null;state.pointerDown=null;
+    $('service-tooltip').hidden=true;
+    region.classList.add('dragging');
+  }
+  function movePinch(){
+    const p=pinchPositions();
+    if(!p||!pinchGesture)return;
+    const zoom=P.clamp(pinchGesture.zoom*p.distance/pinchGesture.distance,.75,64);
+    const unit=P.fitScale(state.width,state.height)*zoom;
+    const world=pinchGesture.world;
+    setCamera(P.view(world.x-(p.x-state.width/2)/unit,
+      world.z+(p.y-state.height/2)/unit,zoom));
+  }
   function mouseEvent(e){
     if(e.button!==0)return;
+    activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    canvas.setPointerCapture(e.pointerId);
+    if(activePointers.size>1){beginPinch();return;}
     state.pointerDown={point:pointerOffset(e),clientX:e.clientX,clientY:e.clientY,camera:{...state.camera},shift:e.shiftKey};
     state.drag={x:e.clientX,y:e.clientY,moved:false};
-    canvas.setPointerCapture(e.pointerId);
-    region.classList.add('dragging')
+    region.classList.add('dragging');
   }
   canvas.addEventListener('pointerdown',mouseEvent);
   canvas.addEventListener('pointermove',e=>{
-    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);updateServiceTooltip(e);if(state.measuring&&state.measurement?.start)schedule();
-    if(!state.drag)return;
+    if(activePointers.has(e.pointerId))activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const current=worldFromPointer(e);state.cursor=current;updateReadout(current);
+    if(pinchGesture){movePinch();return;}
+    updateServiceTooltip(e);if(state.measuring&&state.measurement?.start)schedule();
+    if(!state.drag||!state.pointerDown)return;
     const dx=e.clientX-state.drag.x,dy=e.clientY-state.drag.y;
     if(Math.hypot(e.clientX-state.pointerDown.clientX,e.clientY-state.pointerDown.clientY)>4)state.drag.moved=true;
     const scale=P.scale(state.pointerDown.camera,state.width,state.height);
@@ -834,6 +868,19 @@
     state.markers.push({x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3)),label:$('marker-label').value.trim().slice(0,60)});state.selectedMarkerIndex=state.markers.length-1;$('update-marker').disabled=false;interacted=true;renderMarkerList();saveView();schedule();notify('Marker added at X '+fmt(p.x)+' / Z '+fmt(p.z))
   }
   canvas.addEventListener('pointerup',e=>{
+    activePointers.delete(e.pointerId);
+    if(pinchGesture){
+      pinchGesture=null;
+      // The remaining finger may keep panning, but cannot become a false tap.
+      if(activePointers.size===1){
+        const remaining=[...activePointers.values()][0];
+        state.pointerDown={clientX:remaining.x,clientY:remaining.y,camera:{...state.camera}};
+        state.drag={x:remaining.x,y:remaining.y,moved:true};
+      }else{
+        state.drag=null;state.pointerDown=null;region.classList.remove('dragging');
+      }
+      $('service-tooltip').hidden=true;schedule();return;
+    }
     if(!state.drag)return;
     const wasDrag=state.drag.moved;
     state.drag=null;region.classList.remove('dragging');
@@ -857,9 +904,17 @@
     }}
     schedule()
   });
-  canvas.addEventListener('pointercancel',()=>{state.drag=null;region.classList.remove('dragging');$('service-tooltip').hidden=true});
+  canvas.addEventListener('pointercancel',e=>{activePointers.delete(e.pointerId);pinchGesture=null;state.drag=null;state.pointerDown=null;region.classList.remove('dragging');$('service-tooltip').hidden=true});
   canvas.addEventListener('pointerleave',()=>{$('service-tooltip').hidden=true});
-  canvas.addEventListener('wheel',e=>{e.preventDefault();const p=pointerOffset(e);const multiplier=e.deltaY<0?1.17:1/1.17;setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*multiplier,state.width,state.height))},{passive:false});
+  canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    if(!e.deltaY)return;
+    const p=pointerOffset(e);
+    const pixels=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?state.height:1);
+    const scaled=Math.max(-180,Math.min(180,pixels));
+    const multiplier=Math.exp(-scaled*.0022);
+    setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*multiplier,state.width,state.height));
+  },{passive:false});
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('dblclick',e=>{
     e.preventDefault();const p=pointerOffset(e);setCamera(P.anchoredZoom(state.camera,p.x,p.y,state.camera.zoom*(e.shiftKey?.7:1.7),state.width,state.height))

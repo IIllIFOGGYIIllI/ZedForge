@@ -1,6 +1,19 @@
-# Nasdara interactive map — accuracy and provenance (v0.6.0)
+# Nasdara interactive map — coordinate and navigation stability (v0.6.1)
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
+
+## Touch and zoom navigation (v0.6.1)
+
+- Two-finger gestures zoom around the world position under the gesture's
+  starting midpoint while allowing the midpoint to pan. This preserves the
+  geographic location under the fingers rather than unexpectedly moving
+  buildings or markers.
+- Trackpad and wheel zoom are proportional to the wheel delta rather than
+  fixed 17% jumps. Line/page-based wheel events are normalized.
+- Lifting fingers after a pinch never turns the gesture into a location
+  click or an accidental marker selection.
+- Existing drag-to-pan, search navigation, double-click zoom and visible
+  facility markers are unchanged.
 
 ## Map accuracy and source audit (v0.6.0)
 

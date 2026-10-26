@@ -13,6 +13,13 @@ check('All JavaScript sources are local and present',()=>{
  assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
  for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
 });
+check('Map pointer interactions support touch pinch and proportionate wheel zoom',()=>{
+ assert(app.includes('activePointers=new Map()'));
+ assert(app.includes('function beginPinch()'));
+ assert(app.includes('function movePinch()'));
+ assert(app.includes('pinchGesture=null'));
+ assert(app.includes('Math.exp(-scaled*.0022)'));
+});
 check('Grid accuracy source labelling and audit controls are provided',()=>{
  for(const id of ['show-accuracy-bounds','location-quality','export-accuracy'])assert(html.includes('id="'+id+'"'));
  for(const phrase of ['ZedForgeAccuracy','drawAccuracyBoundary','ACC.csvAudit','updateAccuracyReadout'])assert(app.includes(phrase));
