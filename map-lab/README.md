@@ -4,6 +4,34 @@
 
 This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
+## Building flicker and performance update
+
+After reviewing the second in-browser video from 26 October, the previous
+renderer was confirmed to repaint thousands of textured structures on each
+navigation frame. The fix changes the architecture rather than hiding
+buildings or disabling the overlays:
+
+- Buildings are painted into a transparent back buffer in **140-object batches**.
+  Only completed building images are presented to the visible map canvas.
+- During camera movement the **last complete building layer** is accurately
+  translated and scaled to the current world coordinates until the replacement
+  finishes. No partly drawn buildings can appear.
+- Rapid panning cancels outdated building jobs instead of queuing unnecessary
+  synchronous work. Background picture decode triggers a batched subsequent
+  update rather than repeatedly clearing the map.
+- Draw order is stable by numeric placement index to avoid layers changing when
+  moving across grid cells.
+- The local decoded-model cache is raised to 192 MiB / 550 models for desktop
+  use, reducing repeated picture eviction and decoding.
+- Road visibility defaults to **120%** (in its own control) with lighter paved
+  and dirt colours; the stabilized cached roads stay clearly visible.
+- Road visibility can be adjusted independently of the overall overlay
+  strength. Your existing local map assets remain unchanged.
+
+Automated regressions check incremental painting, cancellation, roof counts
+and the independent road control. Actual browser performance with the complete
+model picture set still requires verification.
+
 ## Stability update — road flicker fix
 
 The previous renderer drew every road segment on the visible canvas on each pan/zoom frame with a desynchronized canvas context. On real maps, that could show the road overlay flashing or disappearing intermittently. The renderer now:
@@ -71,6 +99,8 @@ python -m http.server 8000
 node map-lab/projection.test.cjs
 node map-lab/interface.test.cjs
 node map-lab/mapdata.test.cjs
+node map-lab/road-stability.test.cjs
+node map-lab/building-stability.test.cjs
 ```
 
 Large-volume synthetic stress checks were also performed at the reference record counts. Browser testing with actual independently published files and terrain data is still required before treating visual quality or exact alignment as verified.

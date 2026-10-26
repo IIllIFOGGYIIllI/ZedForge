@@ -70,4 +70,27 @@ check('Building picture visibility has a real rendering counter',()=>{
  assert(mapdata.includes('pictures++'));
 });
 
+
+check('Completed-frame building surfaces replace per-pointer synchronous painting',()=>{
+ assert(mapdata.includes('createStructureJob'));
+ assert(app.includes('structureFront={surface,camera,width,height,result}'));
+ assert(app.includes('drawStructureSurface'));
+ assert(app.includes('ctx.drawImage(front.surface'));
+ assert(!/function drawStructures\(\)\{\s*M\.renderStructures\(/.test(app));
+});
+check('Building work is incremental and cancelled on camera changes',()=>{
+ assert(app.includes('STRUCTURE_BATCH=140'));
+ assert(app.includes('setTimeout(batch,0)'));
+ assert(app.includes('cancelStructureJob'));
+ assert(app.includes('invalidateStructures()'));
+ assert(app.includes('PICTURE_BUDGET=192*1024*1024'));
+});
+check('Bright roads have independently adjustable visibility',()=>{
+ assert(html.includes('id="road-visibility"'));
+ assert(html.includes('id="road-visibility-value"'));
+ assert(app.includes('state.roadVisibility'));
+ assert(app.includes('roadVisibility:state.roadVisibility'));
+ assert(mapdata.includes("inner:'#fff0d1'"));
+});
+
 console.log('\n'+passed+' Map Lab interface checks passed.');

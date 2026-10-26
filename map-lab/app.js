@@ -6,8 +6,79 @@
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
     markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
+    roadLayer:null,objectLayer:null,roadVisibility:1.2,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
+
+  /*
+   * The old renderer painted thousands of roofs onto the visible canvas
+   * every time the camera moved. Work now happens on a private surface in
+   * small batches, and the most recent complete frame is transformed
+   * during navigation until its replacement is fully ready.
+   */
+  let structureFront=null,structureJob=null,structureTimer=0,structureToken=0;
+  let pictureRefreshDirty=false,lastStructureCommit=0;
+  const STRUCTURE_BATCH=140;
+  function cancelStructureJob(){
+    clearTimeout(structureTimer);structureTimer=0;structureToken++;
+    if(structureJob){structureJob.cancel();structureJob=null}
+  }
+  function invalidateStructures(delay=130){
+    cancelStructureJob();
+    if(!state.showStructures||!state.objectLayer||state.camera.zoom<3.8){schedule();return}
+    const generation=structureToken;
+    structureTimer=setTimeout(()=>{
+      structureTimer=0;
+      if(generation===structureToken)startStructureJob(generation);
+    },Math.max(0,delay))
+  }
+  function startStructureJob(generation){
+    if(generation!==structureToken||!state.showStructures||!state.objectLayer)return;
+    const width=Math.round(state.width),height=Math.round(state.height);
+    if(width<10||height<10)return;
+    const dpi=Math.min(state.dpr||1,1.5),surface=document.createElement('canvas');
+    surface.width=Math.ceil(width*dpi);surface.height=Math.ceil(height*dpi);
+    const painter=surface.getContext('2d',{alpha:true});
+    if(!painter){notify('Building canvas unavailable');return}
+    painter.setTransform(dpi,0,0,dpi,0,0);
+    const camera={...state.camera},
+      job=M.createStructureJob(painter,state.objectLayer,{
+        camera,width,height,projection:P,max:14000,
+        opacity:state.overlayAlpha,pictureFor,requestPicture
+      });
+    structureJob=job;pictureRefreshDirty=false;
+    const batch=()=>{
+      if(generation!==structureToken||structureJob!==job)return;
+      const result=job.step(STRUCTURE_BATCH);
+      if(!result.done){setTimeout(batch,0);return}
+      structureJob=null;
+      structureFront={surface,camera,width,height,result};
+      lastStructureCommit=Date.now();state.structureStats=result;schedule();
+      if(pictureRefreshDirty){pictureRefreshDirty=false;invalidateStructures(320)}
+    };
+    setTimeout(batch,0)
+  }
+  function onPictureDecoded(){
+    pictureRefreshDirty=true;
+    if(structureJob||structureTimer||!state.objectLayer||!state.showStructures)return;
+    invalidateStructures(Math.max(140,560-(Date.now()-lastStructureCommit)))
+  }
+  function drawStructureSurface(){
+    if(!state.showStructures||!state.objectLayer||state.camera.zoom<3.8){
+      state.structureStats={drawn:0,visible:0,pictures:0};return
+    }
+    const front=structureFront;
+    if(!front){state.structureStats={drawn:0,visible:0,pictures:0};return}
+    const oldScale=P.scale(front.camera,front.width,front.height),
+      newScale=P.scale(state.camera,state.width,state.height),
+      ratio=newScale/oldScale,
+      center=P.toScreen(front.camera.x,front.camera.z,state.camera,state.width,state.height);
+    if(!Number.isFinite(ratio)||ratio<=0)return;
+    ctx.save();ctx.globalAlpha=1;ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(front.surface,center.x-front.width*ratio/2,center.y-front.height*ratio/2,
+      front.width*ratio,front.height*ratio);
+    ctx.restore();state.structureStats=front.result;
+  }
+
   /* Draw roads once into a transparent back buffer; never expose an
    * incomplete frame on the visible canvas. At close zoom only viewport
    * segments are painted using the precomputed spatial index. */
@@ -30,7 +101,7 @@
   /* Deep-zoom building pictures remain user-supplied. Lazy decoding limits RAM usage. */
   const pictureSources=new Map(),pictureDecoded=new Map(),pictureQueue=[],pictureQueued=new Set();
   let pictureInFlight=0,pictureEpoch=0,pictureBytes=0;
-  const PICTURE_BUDGET=72*1024*1024,PICTURE_CACHE_LIMIT=180;
+  const PICTURE_BUDGET=192*1024*1024,PICTURE_CACHE_LIMIT=550;
   function pictureFor(model){
     const item=pictureDecoded.get(model);
     if(!item)return null;
@@ -40,7 +111,7 @@
   function clearDecodedPictures(){
     for(const value of pictureDecoded.values())value.image.close?.();
     pictureDecoded.clear();pictureSources.clear();pictureQueue.length=0;pictureQueued.clear();
-    pictureBytes=0;pictureEpoch++;
+    pictureBytes=0;pictureEpoch++;pictureRefreshDirty=false;
   }
   function requestPicture(model){
     if(!pictureSources.has(model)||pictureDecoded.has(model)||pictureQueued.has(model)||pictureQueue.length>80)return;
@@ -62,7 +133,7 @@
           const first=pictureDecoded.keys().next().value;if(first===undefined)break;
           const old=pictureDecoded.get(first);old.image.close?.();pictureBytes-=old.bytes;pictureDecoded.delete(first)
         }
-        pictureDecoded.set(model,{image,bytes});pictureBytes+=bytes;schedule();
+        pictureDecoded.set(model,{image,bytes});pictureBytes+=bytes;onPictureDecoded();
       })().catch(err=>{if(epoch===pictureEpoch)console.warn('Could not decode model picture',model,err)})
         .finally(()=>{pictureQueued.delete(model);pictureInFlight--;drainPictures()});
     }
@@ -91,6 +162,7 @@
     if(!incoming.size)throw Error('No numbered 0000.png, 0001.png etc. found; the pictures must match the structure model indices');
     clearDecodedPictures();
     for(const [key,value]of incoming)pictureSources.set(key,value);
+    structureFront=null;invalidateStructures(0);
     $('pictures-status').textContent=incoming.size.toLocaleString()+' numbered model pictures ready • decoded only when zoomed in';
     if(!restored){interacted=true;void cacheLayer('pictures',{files:selected},'building pictures')}
     schedule();notify('Loaded '+incoming.size+' model pictures for detailed close-up rendering')
@@ -107,7 +179,7 @@
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
           structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview},
-        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,
+        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,
         filter:$('event-filter').value
       };
       try{await queueCache('session',session);setCacheStatus('✓ Map settings saved locally')}
@@ -192,6 +264,11 @@
       if(session?.satelliteTone&&['natural','vivid','lowlight'].includes(session.satelliteTone)){$('satellite-tone').value=session.satelliteTone;state.satelliteTone=session.satelliteTone}
       if(typeof session?.overlayAlpha==='number'&&session.overlayAlpha>=.2&&session.overlayAlpha<=1){state.overlayAlpha=session.overlayAlpha;$('overlay-alpha').value=String(Math.round(session.overlayAlpha*100))}
       $('overlay-alpha-value').textContent=Math.round(state.overlayAlpha*100)+'%';
+      if(Number.isFinite(session?.roadVisibility)){
+        state.roadVisibility=Math.max(.4,Math.min(1.4,session.roadVisibility));
+        $('road-visibility').value=String(Math.round(state.roadVisibility*100));
+      }
+      $('road-visibility-value').textContent=Math.round(state.roadVisibility*100)+'%';
       if(roads?.blob instanceof Blob){
         try{await loadRoadLayer(roads.blob,{restored:true,name:roads.name});}catch(e){notify('Could not restore roads: '+e.message)}
       }else if(roads&&Array.isArray(roads.lines)){
@@ -224,7 +301,7 @@
   function resize(){const rect=region.getBoundingClientRect();state.width=rect.width;state.height=rect.height;state.dpr=Math.min(2,window.devicePixelRatio||1);
     const width=Math.max(1,Math.round(state.width*state.dpr)),height=Math.max(1,Math.round(state.height*state.dpr));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
-    schedule()}
+    schedule();invalidateStructures(0)}
   function worldFromPointer(e){const r=canvas.getBoundingClientRect();return P.fromScreen(e.clientX-r.left,e.clientY-r.top,state.camera,state.width,state.height)}
   function pointerOffset(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
   function fmt(x){return Number(x).toFixed(2)}
@@ -262,7 +339,7 @@
     if(zoom<ROAD_DETAIL_ZOOM&&roadOverview){
       const tl=toS(0,EXTENT),br=toS(EXTENT,0);
       ctx.save();
-      ctx.globalAlpha=state.overlayAlpha*(zoom<2.3 ? 0.44 : zoom<3.6 ? 0.58 : 0.72);
+      ctx.globalAlpha=Math.min(1,state.overlayAlpha*state.roadVisibility*(zoom<2.3 ? 0.86 : zoom<3.6 ? 0.93 : 1));
       ctx.imageSmoothingEnabled=true;
       ctx.drawImage(roadOverview,tl.x,tl.y,br.x-tl.x,br.y-tl.y);
       ctx.restore();
@@ -271,13 +348,10 @@
     const visible=M.collectRoadSegments(layer,r,100000);
     M.paintRoadSegments(ctx,layer,visible,(x,z)=>toS(x,z),{
       asphalt:state.showAsphalt,dirt:state.showDirt,overview:false,
-      opacity:state.overlayAlpha*Math.min(1,.67+zoom*.025)
+      opacity:Math.min(1,state.overlayAlpha*state.roadVisibility)
     });
   }
-  function drawStructures(){
-    if(!state.showStructures||!state.objectLayer){state.structureStats={drawn:0,pictures:0,visible:0};return;}
-    state.structureStats=M.renderStructures(ctx,state.objectLayer,{camera:state.camera,width:state.width,height:state.height,projection:P,opacity:state.overlayAlpha,max:7500,pictureFor,requestPicture});
-  }
+  function drawStructures(){drawStructureSurface()}
   function updateScale(){
     const wanted=135/P.scale(state.camera,state.width,state.height);
     const candidate=[10,20,50,100,200,500,1000,2000,5000,10000];
@@ -308,7 +382,7 @@
       if(state.showStructures&&st?.drawn)parts.push(st.drawn.toLocaleString()+' visible • '+(st.pictures||0).toLocaleString()+' textured roofs');
     }
     if(state.eventSpawns.length)parts.push(state.eventSpawns.length.toLocaleString()+' spawns');
-    $('map-layer-count').textContent=parts.length?parts.join(' • '):'Load roads and building geometry for sharper detail';
+    const text=parts.length?parts.join(' • '):'Load roads and building geometry for sharper detail';if($('map-layer-count').textContent!==text)$('map-layer-count').textContent=text;
   }
   function drawMeasurement(){
     const m=state.measurement;if(!m?.start)return;
@@ -353,7 +427,7 @@
     ctx.fillStyle='#0d1e26';ctx.fillRect(0,0,state.width,state.height);
     drawImage();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawEvents();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo()
   }
-  function setCamera(next){state.camera=next;updateZoom();schedule();saveView()}
+  function setCamera(next){state.camera=next;updateZoom();schedule();invalidateStructures();saveView()}
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
     state.selected={x:p.x,z:p.z};coordsInSidebar(p);setCamera(P.view(p.x,p.z,Math.max(2.5,state.camera.zoom)));
     $('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z)
@@ -405,10 +479,11 @@
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
   for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview']]){
-    $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();schedule();saveView()}
+    $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();if(key==='showStructures')invalidateStructures(0);schedule();saveView()}
   }
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
-  $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();saveView()};
+  $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();invalidateStructures();saveView()};
+  $('road-visibility').oninput=e=>{state.roadVisibility=Number(e.target.value)/100;$('road-visibility-value').textContent=e.target.value+'%';schedule();saveView()};
   $('toggle-sidebar').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
   $('focus-map').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
   const overview=$('overview-canvas');
@@ -494,7 +569,7 @@
     $('objects-status').textContent='Reading and indexing structure geometry…';
     await new Promise(done=>setTimeout(done,0));
     const structures=M.parseObjects(await file.arrayBuffer());
-    state.objectLayer=structures;
+    state.objectLayer=structures;structureFront=null;invalidateStructures(0);
     $('objects-status').textContent=structures.count.toLocaleString()+' accurate building placements • '+structures.modelCount+' models • '+filename;
     if(!restored){interacted=true;void cacheLayer('buildings',{blob:file,name:filename},'buildings')}
     schedule();notify('Loaded '+structures.count.toLocaleString()+' calibrated structure placements');return structures;

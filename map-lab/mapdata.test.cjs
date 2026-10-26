@@ -98,4 +98,50 @@ check('Type-specific road overlays retain paved/dirt toggle separation',()=>{
  assert.equal(counts.strokes,2);
 });
 
+
+check('Building paint job can be split into complete, ordered batches',()=>{
+ const a=structures(),layer=M.parseObjects(a),projection=require('./projection.js');
+ const original=global.Path2D,seen=[],ctx={
+  save(){},restore(){},transform(...args){if(args.length===6)seen.push(args)},beginPath(){},fill(){},stroke(){},
+  drawImage(){}
+ };
+ global.Path2D=class{moveTo(){}lineTo(){}closePath(){}};
+ try{
+  const task=M.createStructureJob(ctx,layer,{camera:projection.view(600,600,30),width:1000,height:700,projection});
+  const first=task.step(1);
+  assert.equal(first.done,false,'First batch must not publish an incomplete image');
+  assert.equal(first.drawn,1);
+  const completed=task.step(1);
+  assert.equal(completed.done,true);
+  assert.equal(completed.drawn,2);
+  assert.equal(completed.visible,2);
+  assert.equal(task.step(1).done,true,'Re-entered completed job must remain complete');
+ }finally{if(original===undefined)delete global.Path2D;else global.Path2D=original}
+});
+check('Cancelled structure jobs do not continue painting',()=>{
+ const layer=M.parseObjects(structures()),projection=require('./projection.js');
+ const original=global.Path2D;global.Path2D=class{moveTo(){}lineTo(){}closePath(){}};
+ let fills=0,restores=0;
+ const ctx={save(){},restore(){restores++},transform(){},fill(){fills++},stroke(){}};
+ try{
+   const task=M.createStructureJob(ctx,layer,{camera:projection.view(600,600,30),width:1000,height:700,projection});
+   const partial=task.step(1);assert.equal(partial.done,false);
+   task.cancel();assert.equal(task.step(1).done,true);
+   assert.equal(fills,1,'Cancellation must prevent additional draw calls');
+   assert.equal(restores,2,'One per-object restore plus one final job restore');
+ }finally{if(original===undefined)delete global.Path2D;else global.Path2D=original}
+});
+check('Completed textured roofs report their real drawn picture count',()=>{
+ const layer=M.parseObjects(structures()),projection=require('./projection.js');
+ const original=global.Path2D;global.Path2D=class{moveTo(){}lineTo(){}closePath(){}};
+ const ctx={save(){},restore(){},transform(){},fill(){},stroke(){},drawImage(){}};
+ try{
+   const model=layer.models[0];model.flags=4;model.width=64;model.height=32;
+   model.matrix.set([1,0,0,1,0,0]);
+   const rendered=M.renderStructures(ctx,layer,{camera:projection.view(600,600,30),width:1000,height:700,
+     projection,pictureFor:()=>({width:64,height:32})});
+   assert.equal(rendered.pictures,2);
+ }finally{if(original===undefined)delete global.Path2D;else global.Path2D=original}
+});
+
 console.log('\n'+passed+' detailed map layer checks passed.');

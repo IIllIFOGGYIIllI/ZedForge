@@ -107,8 +107,8 @@
     let count=0;
     ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
     const layers=[
-      {kind:1,enabled:dirt,outer:'#51483d',inner:'#baaa8b',outerWidth:overview?1.30:2.30,innerWidth:overview ? 0.70 : 1.30},
-      {kind:0,enabled:asphalt,outer:'#46453b',inner:'#cebf97',outerWidth:overview?1.75:3.25,innerWidth:overview ? 1.00 : 2.00}
+      {kind:1,enabled:dirt,outer:'#494238',inner:'#e4d4b4',outerWidth:overview?1.30:2.30,innerWidth:overview ? 0.70 : 1.30},
+      {kind:0,enabled:asphalt,outer:'#3c3b33',inner:'#fff0d1',outerWidth:overview?1.75:3.25,innerWidth:overview ? 1.00 : 2.00}
     ];
     for(const style of layers){
       if(!style.enabled)continue;
@@ -202,38 +202,72 @@
     }
     model.path=path;return path;
   }
-  function renderStructures(ctx,layer,{camera,width,height,projection,max=6500,opacity=.95,showWrecks=true,pictureFor=null,requestPicture=null}){
-    if(!layer||camera.zoom<3.8)return{drawn:0,visible:0,pictures:0};
-    const p=projection,b0=p.fromScreen(0,height,camera,width,height),b1=p.fromScreen(width,0,camera,width,height);
-    const visible=collectVisible(layer,{x0:b0.x,z0:b0.z,x1:b1.x,z1:b1.z},max);
-    const metersPerPixel=1/p.scale(camera,width,height);
+  /*
+   * Stable structure rendering can be divided across animation frames.
+   * Paints only to the caller's private back buffer; callers swap buffers
+   * after the entire job completes. Sorting indices guarantees the same
+   * object stacking order even when spatial-cell traversal changes.
+   */
+  function createStructureJob(ctx,layer,{
+    camera,width,height,projection,max=14000,opacity=.95,
+    showWrecks=true,pictureFor=null,requestPicture=null
+  }={}){
+    if(!layer||camera.zoom<3.8)return{
+      total:0,step:()=>({done:true,drawn:0,visible:0,pictures:0}),cancel(){}
+    };
+    const p=projection,
+      b0=p.fromScreen(0,height,camera,width,height),
+      b1=p.fromScreen(width,0,camera,width,height),
+      visible=collectVisible(layer,{x0:b0.x,z0:b0.z,x1:b1.x,z1:b1.z},max).sort((a,b)=>a-b),
+      metersPerPixel=1/p.scale(camera,width,height);
+    let cursor=0,drawn=0,pictures=0,closed=false;
     ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';
-    let drawn=0,pictures=0;
-    for(const index of visible){
-      const item=layer.placements[index],model=layer.models[item.model],spread=Math.max(item.x1-item.x0,item.z1-item.z0);
-      if(model.flags&2 && camera.zoom<6)continue;
-      if(spread/metersPerPixel<1.5)continue;
-      if(!showWrecks&&model.flags&1)continue;
-      const shape=footprintPath(layer,model);if(!shape)continue;
-      const a=layer.coordinates[index*4],b=layer.coordinates[index*4+1],
-      co=layer.coordinates[index*4+2],si=layer.coordinates[index*4+3],loc=p.toScreen(a,b,camera,width,height),s=p.scale(camera,width,height);
-      ctx.save();ctx.transform(co*s,-si*s,-si*s,-co*s,loc.x,loc.y);
-      ctx.fillStyle=model.flags&1?'#8d614d':'#525e5c';ctx.strokeStyle='#1b2728';
-      ctx.lineWidth=Math.max(.5,1/(s*Math.hypot(co,si)));
-      const hasPicture=(model.flags&4)!==0&&model.width>0&&model.height>0&&camera.zoom>=5.5;
-      const photo=hasPicture&&pictureFor?pictureFor(item.model):null;
-      if(photo){
-        const t=model.matrix;
-        ctx.save();ctx.transform(t[0],t[1],t[2],t[3],t[4],t[5]);
-        ctx.drawImage(photo,0,0,model.width,model.height);ctx.restore();
-        ctx.stroke(shape);pictures++;
-      }else{
-        ctx.fill(shape);ctx.stroke(shape);
-        if(hasPicture&&requestPicture)requestPicture(item.model);
-      }
-      ctx.restore();drawn++
+    function finish(){
+      if(!closed){closed=true;ctx.restore()}
+      return{done:true,drawn,visible:visible.length,pictures};
     }
-    ctx.restore();return{drawn,visible:visible.length,pictures}
+    function step(batch=180){
+      if(closed)return{done:true,drawn,visible:visible.length,pictures};
+      const maxCount=Math.max(1,Math.min(2000,Number.isFinite(batch)?batch:2000));
+      const to=Math.min(visible.length,cursor+maxCount);
+      while(cursor<to){
+        const index=visible[cursor++],item=layer.placements[index],model=layer.models[item.model],
+          spread=Math.max(item.x1-item.x0,item.z1-item.z0);
+        if(model.flags&2 && camera.zoom<6)continue;
+        if(spread/metersPerPixel<1.5)continue;
+        if(!showWrecks&&model.flags&1)continue;
+        const shape=footprintPath(layer,model);if(!shape)continue;
+        const a=layer.coordinates[index*4],b=layer.coordinates[index*4+1],
+          co=layer.coordinates[index*4+2],si=layer.coordinates[index*4+3],
+          loc=p.toScreen(a,b,camera,width,height),s=p.scale(camera,width,height);
+        ctx.save();
+        ctx.transform(co*s,-si*s,-si*s,-co*s,loc.x,loc.y);
+        ctx.fillStyle=model.flags&1?'#8d614d':'#525e5c';
+        ctx.strokeStyle='#1b2728';
+        ctx.lineWidth=Math.max(.5,1/(s*Math.hypot(co,si)));
+        const hasPicture=(model.flags&4)!==0&&model.width>0&&model.height>0&&camera.zoom>=5.5;
+        const photo=hasPicture&&pictureFor?pictureFor(item.model):null;
+        if(photo){
+          const t=model.matrix;
+          ctx.save();ctx.transform(t[0],t[1],t[2],t[3],t[4],t[5]);
+          ctx.drawImage(photo,0,0,model.width,model.height);
+          ctx.restore();ctx.stroke(shape);pictures++;
+        }else{
+          ctx.fill(shape);ctx.stroke(shape);
+          if(hasPicture&&requestPicture)requestPicture(item.model);
+        }
+        ctx.restore();drawn++;
+      }
+      if(cursor>=visible.length)return finish();
+      return{done:false,drawn,visible:visible.length,pictures};
+    }
+    return{total:visible.length,step,cancel:()=>finish()};
   }
-  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures,buildRoadIndex,collectRoadSegments,paintRoadSegments};
+  function renderStructures(ctx,layer,options){
+    const job=createStructureJob(ctx,layer,options);
+    let status;
+    do{status=job.step(2000)}while(!status.done);
+    return status;
+  }
+  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures,createStructureJob,buildRoadIndex,collectRoadSegments,paintRoadSegments};
 });

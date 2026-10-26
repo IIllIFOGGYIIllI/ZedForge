@@ -49,3 +49,6 @@
 
 /* Zoomed building picture layer, matching local .objects model indices */
 #pictures-status{color:var(--accent)}
+
+#road-visibility{display:block;width:100%;accent-color:var(--accent);margin:10px 0 4px}
+#road-visibility-value{float:right;color:var(--accent);font-weight:800}
