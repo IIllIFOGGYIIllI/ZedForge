@@ -198,43 +198,56 @@
     if(loc.kind==='village')return zoom>=2.7;
     return zoom>=2.1;
   }
+  /* Cartographic typography instead of boxed UI pins.
+   * Labels use the map's true projected metre coordinates and a small halo
+   * so they remain readable on bright desert and dark forest satellite areas.
+   * Grid-centre locations remain approximate (within the published 100m cell).
+   */
   function drawLocations(){
     if(!state.showPois||!state.poiIndex)return;
-    const visible=A.visiblePoints(state.poiIndex,visibleExtent(),800);
+    const visible=A.visiblePoints(state.poiIndex,visibleExtent(),900);
+    if(!visible.length)return;
     const rank={city:0,town:1,airfield:2,military:3,industrial:4,village:5,fuel:6,medical:6,trader:6,water:6,landmark:7,forest:8,other:9};
-    const symbols={city:'◆',town:'●',village:'·',military:'★',airfield:'✈',industrial:'⚙',
-      fuel:'F',medical:'+',trader:'$',water:'≈',landmark:'◆',forest:'♣',other:'•'};
-    const colors={city:'#f5f7ea',town:'#d0f8e5',village:'#a8dccc',
-      military:'#ffb998',airfield:'#f3d17c',industrial:'#eab8a4',
-      fuel:'#f2dd77',medical:'#ef8e9e',trader:'#ffd078',
-      water:'#75d3ed',landmark:'#c6cee9',forest:'#86c99e',other:'#b2cec8'};
     visible.sort((a,b)=>(rank[a.kind]??9)-(rank[b.kind]??9));
-    ctx.save();ctx.textBaseline='middle';
-    const boxes=[];let shown=0;
+    ctx.save();
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineJoin='round';ctx.miterLimit=2;
+    const occupied=[];let shown=0;
     for(const loc of visible){
       if(!poiVisible(loc))continue;
-      const p=toS(loc.x,loc.z);
-      if(p.x<-50||p.x>state.width+50||p.y<-30||p.y>state.height+30)continue;
-      const label=loc.name.slice(0,42),major=loc.kind==='city'||loc.kind==='town';
-      ctx.font=major?'bold 12px system-ui':'600 11px system-ui';
-      const width=Math.min(280,ctx.measureText(label).width+21);
-      const box={x:p.x+12,y:p.y-11,w:width,h:22};
-      if(boxes.some(b=>box.x<b.x+b.w+6&&box.x+box.w+6>b.x&&box.y<b.y+b.h+5&&box.y+box.h+5>b.y))continue;
-      boxes.push(box);
-      const color=colors[loc.kind]||colors.other;
-      ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);
-      ctx.fillStyle='#0b2229';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.stroke();
-      ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.fillStyle=color;
-      ctx.fillText(symbols[loc.kind]||'•',p.x,p.y+.6);
-      ctx.textAlign='left';
-      ctx.fillStyle='#061d25eb';ctx.fillRect(box.x,box.y,box.w,box.h);
-      ctx.strokeStyle=major?color:'#5caba1';ctx.lineWidth=major?1:.7;
-      ctx.strokeRect(box.x,box.y,box.w,box.h);
-      ctx.font=major?'bold 12px system-ui':'600 11px system-ui';
-      ctx.fillStyle=color;
-      ctx.fillText(label,box.x+8,box.y+11);
+      const pos=toS(loc.x,loc.z);
+      const kind=loc.kind,city=kind==='city',town=kind==='town',
+        village=kind==='village',military=kind==='military';
+      const size=city?17:town?14:village?12:(military||kind==='airfield')?12:11;
+      const label=city?loc.name.toLocaleUpperCase():loc.name;
+      ctx.font=city?'700 17px Georgia, "Times New Roman", serif':
+        town?'bold 14px Georgia, "Times New Roman", serif':
+        village?'italic 12px Georgia, "Times New Roman", serif':
+        military?'600 12px system-ui, sans-serif':
+        '600 '+size+'px Georgia, "Times New Roman", serif';
+      // Canvas letterSpacing may not be available in every browser.
+      if('letterSpacing' in ctx)ctx.letterSpacing=city?'1.4px':town?'.35px':'0px';
+      const width=Math.min(340,ctx.measureText(label).width);
+      // Anchor the name on the settlement, not offset to a marker at its edge.
+      const box={x:pos.x-width/2-4,y:pos.y-size/2-4,w:width+8,h:size+8};
+      if(box.x>state.width+15||box.x+box.w<-15||box.y>state.height+15||box.y+box.h<-15)continue;
+      const padding=city?12:town?9:6;
+      if(occupied.some(b=>box.x<b.x+b.w+padding&&box.x+box.w+padding>b.x&&
+          box.y<b.y+b.h+padding&&box.y+box.h+padding>b.y))continue;
+      occupied.push(box);
+      // Ink-like map type with an ivory outline is readable without any
+      // rectangles, pin icons, shaded badges or artificial roads/POIs.
+      ctx.strokeStyle='rgba(245,239,218,.96)';
+      ctx.lineWidth=city?4.5:town?3.7:3.2;
+      ctx.strokeText(label,pos.x,pos.y);
+      ctx.fillStyle=military?'#703624':
+        kind==='industrial'?'#594534':
+        kind==='airfield'?'#5b4326':
+        '#1d2c29';
+      ctx.fillText(label,pos.x,pos.y);
       if(++shown>=90)break;
     }
+    if('letterSpacing' in ctx)ctx.letterSpacing='0px';
     ctx.restore();
   }
 

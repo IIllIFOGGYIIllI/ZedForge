@@ -7,10 +7,10 @@ const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
 const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js');
 async function main(){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
- const listeners=[],frames=[];
+ const listeners=[],frames=[],labelStrokes=[];
  const ctx={
   save(){},restore(){},fillRect(){},strokeRect(){},clearRect(){},setTransform(){},
-  beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},fillText(){},strokeText(){},
+  beginPath(){},moveTo(){},lineTo(){},stroke(){},fill(){},fillText(){},strokeText(...args){labelStrokes.push(args)},
   arc(){},setLineDash(){},drawImage(){},scale(){},translate(){},transform(){},
   measureText:txt=>({width:txt.length*7})
  };
@@ -67,6 +67,14 @@ async function main(){
  elements.get('poi-search').value='Dashtabad';
  elements.get('poi-search').oninput();
  assert.equal(elements.get('poi-results').options.length,2);
+ assert(PL.points.find(p=>p.name==='Nasdara').z<PL.points.find(p=>p.name==='Dashtabad').z);
+ assert.equal(PL.points.find(p=>p.name==='Nasdara').z,4234);
+ assert(labelStrokes.some(p=>p[0]==='NASDARA'),'The capital must be drawn as uppercase map text');
+ const capital=labelStrokes.find(p=>p[0]==='NASDARA'),northern=labelStrokes.find(p=>p[0]==='DASHTABAD');
+ assert(northern,'Dashtabad city map label missing');
+ assert(northern[2]<capital[2],'The northern city label must be above the southern capital');
+ assert(!source.includes('ctx.fillRect(box.x,box.y,box.w,box.h)'),'Location labels must not use boxed badges');
+ console.log('PASS map typography draws unboxed city text in corrected north-south order');
  assert(elements.get('show-military').checked);
  console.log('PASS all 78 named Nasdara locations are searchable on first load');
  const satellite={name:'nasdara.png',type:'image/png',size:10000};
@@ -109,6 +117,6 @@ async function main(){
  console.log('PASS multi-resolution ZIP manifest loads without a server or remote requests');
  assert(!source.includes('fetch('));
  console.log('PASS all new imports are local-only');
- console.log('7 advanced integration checks passed.');
+ console.log('8 advanced integration checks passed.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

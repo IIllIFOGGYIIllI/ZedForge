@@ -1,13 +1,42 @@
-# Nasdara Map Lab — consolidated mapping release (v0.4.0)
+# Nasdara Map Lab — corrected geography and typography (v0.4.2)
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
+
+## Corrected map-grid orientation and map typography (v0.4.2)
+
+Published six-figure **map grid references use the top-left origin**: the
+first three digits count east, and the second three digits count *south*
+on the paper map. DayZ's actual world Z grows *north*. The original
+v0.4.1 code incorrectly treated the second map-grid number as northward
+world Z, vertically mirroring every built-in location.
+
+The built-in positions now convert via
+`X = gridX * 100 + 50` and `Z = 16384 - (gridRow * 100 + 50)`.
+For example, southern Nasdara (grid 101 121) now maps near **X 10150,
+Z 4234**, while northern Dashtabad (grid 104 057) maps near **X 10450,
+Z 10634**. The original six-digit grid references are preserved for
+search, citations and visual verification.
+
+This correction applies **only to built-in 100-metre map references**.
+User-imported X/Z points, satellite imagery, roads, buildings, custom
+markers, spawn files and coordinate measurement are NOT inverted.
+
+Labels now use traditional map-text presentation: **large uppercase
+serif for cities, bold serif for towns, italic serif for villages, and
+restrained cartographic lettering for military/industrial sites**.
+Subtle pale outlines improve legibility over satellite terrain.
+Rectangular name boxes, permanent marker circles and UI badge styling
+have been removed. Category filters and collision culling remain.
+
+Grid-square markers remain approximate to the published 100-metre cell,
+rather than surveyed centres of each building.
 
 ## Built-in permanent Nasdara places (v0.4.1)
 
 **78 named locations display automatically** with no extra CSV required:
 **2 cities, 14 towns, 42 villages, 6 industrial districts/sites,
 1 airfield and 13 military installations**. Place names appear with
-category-specific symbols, colours and collision-aware labels; all 78
+cartographic text sizes, category differentiation and collision-aware labels; all 78
 can be found in the sidebar search, including when zoomed out.
 
 Source: [Nasdara interactive guide](https://www.nasdaramap.com/guide),

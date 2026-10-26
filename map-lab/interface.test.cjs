@@ -167,15 +167,23 @@ check('Real Nasdara named locations are bundled and displayed without an upload'
  assert(html.includes('78 named Nasdara locations included'));
  assert(html.includes('www.nasdaramap.com/guide'));
 });
-check('Place categories have distinct symbols, colours, and separate visibility filters',()=>{
+check('Cartographic labels use traditional typography and category visibility filters',()=>{
  for(const id of ['show-pois','show-villages','show-military','show-industry']){
   assert(html.includes('id="'+id+'"'));
   assert(app.includes("'"+id+"'"));
  }
- assert(app.includes("military:'★'"));
- assert(app.includes("airfield:'✈'"));
- assert(app.includes("industrial:'⚙'"));
  assert(app.includes('function poiVisible(loc)'));
+ assert(app.includes('ctx.strokeText(label,pos.x,pos.y)'));
+ assert(app.includes('ctx.fillText(label,pos.x,pos.y)'));
+ assert(app.includes('Georgia, "Times New Roman", serif'));
+ assert(app.includes("loc.name.toLocaleUpperCase()"));
+ assert(!app.includes("ctx.fillRect(box.x,box.y,box.w,box.h)"));
+ assert(places.includes("16384-(southRow*100+50)"));
+});
+check('Only the map-grid place data is inverted, not original game coordinates',()=>{
+ assert(mapdata.includes('function paintRoadSegments'));
+ assert(app.includes('state.selected={x:loc.x,z:loc.z}'));
+ assert(places.includes('second grid number counts south'));
 });
 check('Existing custom place imports add to the built-in map rather than replacing it',()=>{
  assert(app.includes('mergePermanentPlaces(list)'));

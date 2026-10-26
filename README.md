@@ -49,10 +49,19 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
+## Nasdara Map Lab v0.4.2
+
+Fixed the **vertical map-grid inversion** of all 78 built-in Nasdara
+places. Published six-digit grid rows count south from the top-left,
+while game world Z increases north. Only bundled map reference labels
+are corrected: imported game X/Z, imagery, yellow roads, and structure
+positions remain untouched. Location nameplates and marker dots are
+replaced with conventional, halo-outlined map text.
+
 ## Nasdara Map Lab v0.4.1
 
 The map now **includes 78 permanent named Nasdara places out of the box**
-(approximately centred on published 100 m grid squares). Town, village,
+(converted from top-left 100 m map references to north-increasing DayZ world Z). Town, village,
 military, industry, and airfield locations have searchable labels and
 category controls. Event positions remain hidden until proper icons are
 available. Third-party satellite imagery and individual tree datasets
