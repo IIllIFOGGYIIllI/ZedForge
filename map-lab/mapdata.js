@@ -170,17 +170,28 @@
   /* Paint outlines for all road classes, then centres for all classes.
    * Rounded ends and repaired short gaps remove seams at junctions. */
   function paintRoadSegments(ctx,layer,indices,project,{
-    asphalt=true,dirt=true,overview=false,opacity=1
+    asphalt=true,dirt=true,overview=false,opacity=1,
+    worldScale=0,pavedWidthMeters=8
   }={}){
     if(!layer||!indices?.length)return 0;
     const v=layer.values,kinds=layer.kinds;
+    // Road data uses metre coordinates. At close zoom, draw a true width
+    // in world metres instead of a 4px line over a 15px satellite road.
+    // Overview stroke widths and the legacy non-scaled API stay unchanged.
+    const scale=!overview&&Number.isFinite(worldScale)&&worldScale>0?worldScale:0;
+    const widthMeters=Number.isFinite(pavedWidthMeters)
+      ?Math.max(3,Math.min(12,pavedWidthMeters)):8;
+    const pavedOuter=scale?Math.max(4,Math.min(26,widthMeters*scale)):4;
+    const pavedInner=scale?Math.max(2.6,pavedOuter-Math.max(1.4,pavedOuter*.17)):2.6;
+    const dirtOuter=scale?Math.max(2.8,Math.min(15,widthMeters*.55*scale)):2.8;
+    const dirtInner=scale?Math.max(1.7,dirtOuter-Math.max(1.1,dirtOuter*.23)):1.7;
     const styles=[
-      // Dirt stays muted; paved roads receive a distinct golden centre.
-      // Keep existing overview widths to avoid overwhelming distant terrain.
+      // Dirt stays muted; paved roads retain their golden yellow centre.
+      // Overview widths are intentionally fixed for map readability.
       {kind:1,enabled:dirt,outer:'#4b4338',inner:'#d8c29a',
-        outerWidth:overview?1.30:2.80,innerWidth:overview?0.70:1.70},
+        outerWidth:overview?1.30:dirtOuter,innerWidth:overview?0.70:dirtInner},
       {kind:0,enabled:asphalt,outer:'#5a4a1f',inner:'#f2d35b',
-        outerWidth:overview?1.75:4.00,innerWidth:overview?1.00:2.60}
+        outerWidth:overview?1.75:pavedOuter,innerWidth:overview?1.00:pavedInner}
     ];
     ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
     for(const phase of ['outer','inner']){

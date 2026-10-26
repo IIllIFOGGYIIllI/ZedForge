@@ -4,6 +4,17 @@
 
 This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
+## Road overlay now matches real-world width at close zoom
+
+The earlier golden road strokes were still just **4 px outer / 2.6 px inner** at 64× zoom, which visibly failed to cover the satellite road underneath.
+
+- Close-up paved-road overlays now scale using **pixels per world metre**, calculated from the calibrated Nasdara camera; the default **8.0 m** road is approximately 16–17 px across in the user's 64× screenshot.
+- Added a **Road overlay width** control from 3 to 12 metres (default 8), persisted in local browser settings. The dirt road overlay scales to approximately 55% of the paved-road width.
+- Retains golden-yellow paved roads, tan dirt tracks and a contrasting dark edge on both.
+- Old, fixed **overview zoom widths stay exactly the same**. The existing cached overview, repair joins and structure performance optimisations are retained.
+- Width changes only schedule an ordinary map redraw; they do not re-import the road data or regenerate the full overview buffer.
+- **Limitation:** the dataset contains line centre positions and road class, not per-road physical lane widths. The metre-based width and slider substantially improve coverage, but some individual roads may still be wider/narrower or slightly offset.
+
 ## Yellow paved-road styling and close-zoom widths
 
 - **Paved roads:** golden yellow `#f2d35b` centres, dark brown `#5a4a1f` borders.

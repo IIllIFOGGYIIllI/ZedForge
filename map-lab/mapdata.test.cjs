@@ -204,4 +204,51 @@ check('Yellow paved roads have wider outlines only at close zoom',()=>{
  ]);
 });
 
+check('Close-up road strokes match metres-to-pixels map scale',()=>{
+ const layer={values:new Float32Array([10,20,30,40,40,50,60,70]),kinds:new Uint8Array([0,1])};
+ const result=[];
+ const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+   stroke(){result.push({colour:this.strokeStyle,width:this.lineWidth})}};
+ M.paintRoadSegments(ctx,layer,[0,1],(x,z)=>({x,y:z}),{
+   worldScale:2,pavedWidthMeters:8
+ });
+ assert.equal(result.length,4);
+ assert.equal(result[0].colour,'#4b4338');
+ assert.equal(result[1].colour,'#5a4a1f');
+ assert.equal(result[3].colour,'#f2d35b');
+ assert(Math.abs(result[0].width-8.8)<.01,'Dirt road width should scale in world metres');
+ assert(Math.abs(result[1].width-16)<.01,'Paved road should cover 8 metres at 2px/m');
+ assert(Math.abs(result[2].width-6.776)<.01,'Dirt inner line should retain edge');
+ assert(Math.abs(result[3].width-13.28)<.01,'Yellow centre should fill most of the paved road');
+});
+check('Overview keeps its original road line widths regardless of world scale',()=>{
+ const layer={values:new Float32Array([10,20,30,40,40,50,60,70]),kinds:new Uint8Array([0,1])},paint=[];
+ const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+   stroke(){paint.push([this.strokeStyle,this.lineWidth])}};
+ M.paintRoadSegments(ctx,layer,[0,1],(x,z)=>({x,y:z}),{
+   overview:true,worldScale:12,pavedWidthMeters:12
+ });
+ assert.deepEqual(paint,[
+  ['#4b4338',1.3],['#5a4a1f',1.75],['#d8c29a',.7],['#f2d35b',1]
+ ]);
+});
+check('Road widths are bounded even at maximum zoom',()=>{
+ const layer={values:new Float32Array([10,20,30,40,40,50,60,70]),kinds:new Uint8Array([0,1])},widths=[];
+ const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+   stroke(){widths.push(this.lineWidth)}};
+ M.paintRoadSegments(ctx,layer,[0,1],(x,z)=>({x,y:z}),{worldScale:999,pavedWidthMeters:999});
+ assert.equal(widths[0],15);
+ assert.equal(widths[1],26);
+ assert(widths[2]<widths[0]&&widths[3]<widths[1],'Road borders must remain visible');
+});
+check('At zoom 64, an eight-metre paved road occupies road-sized pixels',()=>{
+ const P=require('./projection.js'),scale=P.scale(P.view(8192,8192,64),1245,576);
+ const widths=[];
+ const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+   stroke(){widths.push(this.lineWidth)}};
+ const layer={values:new Float32Array([10,20,30,40]),kinds:new Uint8Array([0])};
+ M.paintRoadSegments(ctx,layer,[0],(x,z)=>({x,y:z}),{worldScale:scale,pavedWidthMeters:8});
+ assert(widths[0]>14&&widths[0]<20,'Close-up paved overlay should be ~15-18px, not 4px');
+});
+
 console.log('\n'+passed+' detailed map layer checks passed.');

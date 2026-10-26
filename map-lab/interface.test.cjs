@@ -108,4 +108,22 @@ check('Road smoothing links remain visible at both close and overview zoom',()=>
  assert(mapdata.includes("ctx.lineCap='round'"));
 });
 
+check('User can tune a road width measured in world metres',()=>{
+ assert(html.includes('id="road-width"'));
+ assert(html.includes('id="road-width-value"'));
+ assert(html.includes('min="3" max="12" step="0.5" value="8"'));
+ assert(app.includes('worldScale:P.scale(state.camera,state.width,state.height)'));
+ assert(app.includes('pavedWidthMeters:state.roadWidthMeters'));
+ assert(app.includes('roadWidthMeters:state.roadWidthMeters'));
+ assert(app.includes("state.roadWidthMeters=P.clamp(session.roadWidthMeters,3,12)"));
+ assert(app.includes("$('road-width').oninput="));
+});
+check('Changing close-up road width avoids expensive overview layer rebuilding',()=>{
+ const line=app.match(/\$\('road-width'\)\.oninput=e=>\{[\s\S]*?\n  \};/);
+ assert(line,'Road width change handler absent');
+ assert(!line[0].includes('rebuildRoadOverview'));
+ assert(line[0].includes('schedule();saveView()'));
+ assert(mapdata.includes('outerWidth:overview?1.75:pavedOuter'));
+});
+
 console.log('\n'+passed+' Map Lab interface checks passed.');

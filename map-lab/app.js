@@ -6,7 +6,7 @@
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
     markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,roadVisibility:1.2,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
+    roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
 
   /*
@@ -179,7 +179,7 @@
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
           structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview},
-        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,vegetationDetail:state.vegetationDetail,
+        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,roadWidthMeters:state.roadWidthMeters,vegetationDetail:state.vegetationDetail,
         filter:$('event-filter').value
       };
       try{await queueCache('session',session);setCacheStatus('✓ Map settings saved locally')}
@@ -274,6 +274,10 @@
         $('road-visibility').value=String(Math.round(state.roadVisibility*100));
       }
       $('road-visibility-value').textContent=Math.round(state.roadVisibility*100)+'%';
+      if(Number.isFinite(session?.roadWidthMeters))
+        state.roadWidthMeters=P.clamp(session.roadWidthMeters,3,12);
+      $('road-width').value=String(state.roadWidthMeters);
+      $('road-width-value').textContent=state.roadWidthMeters.toFixed(1)+' m';
       if(Number.isFinite(session?.vegetationDetail))
         state.vegetationDetail=Math.max(0,Math.min(1,session.vegetationDetail));
       $('vegetation-detail').value=String(Math.round(state.vegetationDetail*100));
@@ -362,6 +366,8 @@
     const visible=M.collectRoadSegments(layer,r,100000);
     M.paintRoadSegments(ctx,layer,visible,(x,z)=>toS(x,z),{
       asphalt:state.showAsphalt,dirt:state.showDirt,overview:false,
+      worldScale:P.scale(state.camera,state.width,state.height),
+      pavedWidthMeters:state.roadWidthMeters,
       opacity:Math.min(1,state.overlayAlpha*state.roadVisibility)
     });
   }
@@ -498,6 +504,11 @@
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
   $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();invalidateStructures();saveView()};
   $('road-visibility').oninput=e=>{state.roadVisibility=Number(e.target.value)/100;$('road-visibility-value').textContent=e.target.value+'%';schedule();saveView()};
+  $('road-width').oninput=e=>{
+    state.roadWidthMeters=P.clamp(Number(e.target.value)||8,3,12);
+    $('road-width-value').textContent=state.roadWidthMeters.toFixed(1)+' m';
+    schedule();saveView();
+  };
   $('vegetation-detail').oninput=e=>{state.vegetationDetail=Number(e.target.value)/100;$('vegetation-detail-value').textContent=e.target.value+'%';schedule();saveView()};
   $('toggle-sidebar').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
   $('focus-map').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};

@@ -55,3 +55,7 @@
 
 #vegetation-detail{display:block;width:100%;accent-color:var(--accent);margin:9px 0 4px}
 #vegetation-detail-value{float:right;color:var(--accent);font-weight:800}
+
+/* Actual close-up road coverage is controlled separately from visibility. */
+#road-width{display:block;width:100%;accent-color:var(--accent);margin:9px 0 5px}
+#road-width-value{float:right;color:var(--accent);font-weight:800}
