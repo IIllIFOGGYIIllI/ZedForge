@@ -67,4 +67,35 @@ check('Local building picture is drawn using model affine mapping',()=>{
  }finally{if(original===undefined)delete global.Path2D;else global.Path2D=original}
 });
 
+
+check('Road spatial index finds intersecting segments without scanning all roads',()=>{
+ const layer=M.parseRoads(roads());
+ assert.equal(layer.grid.length,4096);
+ assert(layer.gridLinks>=3);
+ assert.deepEqual(M.collectRoadSegments(layer,{x0:1190,x1:1400,z0:3990,z1:4200}),[1]);
+ assert.deepEqual(M.collectRoadSegments(layer,{x0:9000,x1:10000,z0:9000,z1:10000}),[]);
+});
+check('Long segments crossing a viewport are included without internal endpoints',()=>{
+ const a=roads(),v=new DataView(a);
+ v.setFloat32(16,500,true);v.setFloat32(20,6000,true);
+ v.setFloat32(24,12000,true);v.setFloat32(28,6000,true);
+ const layer=M.parseRoads(a);
+ assert(M.collectRoadSegments(layer,{x0:7500,x1:7600,z0:5900,z1:6100}).includes(0));
+});
+check('World road paint never clears a destination canvas',()=>{
+ const layer=M.parseRoads(roads()),calls=[];
+ const ctx={save(){calls.push('save')},restore(){calls.push('restore')},beginPath(){},moveTo(x,y){calls.push(['move',x,y])},
+    lineTo(x,y){calls.push(['line',x,y])},stroke(){calls.push('stroke')}};
+ const count=M.paintRoadSegments(ctx,layer,[0,1,2],(x,z)=>({x,y:z}),{overview:true});
+ assert.equal(count,3);assert(calls.some(x=>x==='stroke'));
+ assert(!calls.includes('clearRect'));assert(!calls.includes('fillRect'));
+ assert.deepEqual(calls.filter(x=>x==='stroke').length,4);
+});
+check('Type-specific road overlays retain paved/dirt toggle separation',()=>{
+ const layer=M.parseRoads(roads()),counts={strokes:0};
+ const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},stroke(){counts.strokes++}};
+ M.paintRoadSegments(ctx,layer,[0,1,2],(x,z)=>({x,y:z}),{asphalt:false,dirt:true});
+ assert.equal(counts.strokes,2);
+});
+
 console.log('\n'+passed+' detailed map layer checks passed.');

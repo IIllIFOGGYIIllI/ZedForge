@@ -30,7 +30,7 @@
       if(kind>1)throw Error('Unknown road segment type '+kind);
       kinds[i]=kind;if(kind===0)asphalt++;else dirt++;
     }
-    return{format:'dvmroad1',count,values,kinds,asphalt,dirt};
+    return buildRoadIndex({format:'dvmroad1',count,values,kinds,asphalt,dirt});
   }
   function parseGeoJSON(data){
     const shapes=[],featureList=data?.type==='FeatureCollection'?data.features:[data];
@@ -54,8 +54,80 @@
     if(!shapes.length)throw Error('No road LineStrings found in the uploaded GeoJSON');
     const count=shapes.reduce((s,a)=>s+a.length-1,0),values=new Float32Array(count*4),kinds=new Uint8Array(count);
     let i=0;for(const shape of shapes)for(let p=1;p<shape.length;p++){values.set([shape[p-1][0],shape[p-1][1],shape[p][0],shape[p][1]],i*4);i++}
-    return{format:'geojson',count,values,kinds,asphalt:count,dirt:0};
+    return buildRoadIndex({format:'geojson',count,values,kinds,asphalt:count,dirt:0});
   }
+  /* Spatially index road segments at import time. This prevents scanning ~47K
+   * segments on every pan and zoom, which previously caused redraw flicker. */
+  function buildRoadIndex(layer){
+    const grid=Array.from({length:GRID*GRID},()=>[]),d=layer.values;
+    let links=0;
+    for(let i=0;i<layer.count;i++){
+      const k=i*4,x0=Math.min(d[k],d[k+2]),x1=Math.max(d[k],d[k+2]),
+        z0=Math.min(d[k+1],d[k+3]),z1=Math.max(d[k+1],d[k+3]);
+      if(x1<0||z1<0||x0>EXTENT||z0>EXTENT)continue;
+      const a=Math.max(0,Math.min(GRID-1,Math.floor(x0/CELL))),
+        b=Math.max(0,Math.min(GRID-1,Math.floor(x1/CELL))),
+        c=Math.max(0,Math.min(GRID-1,Math.floor(z0/CELL))),
+        e=Math.max(0,Math.min(GRID-1,Math.floor(z1/CELL)));
+      for(let y=c;y<=e;y++)for(let x=a;x<=b;x++){
+        grid[y*GRID+x].push(i);
+        if(++links>3000000)throw Error('Road file has unexpectedly complex spatial coverage');
+      }
+    }
+    layer.grid=grid;layer.gridLinks=links;
+    return layer;
+  }
+  function collectRoadSegments(layer,bounds,limit=1000000){
+    if(!layer||!bounds||bounds.x0>EXTENT||bounds.z0>EXTENT||
+      bounds.x1<0||bounds.z1<0||bounds.x0>bounds.x1||bounds.z0>bounds.z1)return[];
+    const startX=Math.max(0,Math.min(63,Math.floor(bounds.x0/CELL))),
+      endX=Math.max(0,Math.min(63,Math.floor(bounds.x1/CELL))),
+      startZ=Math.max(0,Math.min(63,Math.floor(bounds.z0/CELL))),
+      endZ=Math.max(0,Math.min(63,Math.floor(bounds.z1/CELL)));
+    const visited=new Set(),found=[],v=layer.values;
+    for(let z=startZ;z<=endZ;z++)for(let x=startX;x<=endX;x++){
+      for(const i of layer.grid[z*GRID+x]){
+        if(visited.has(i))continue;visited.add(i);
+        const k=i*4;
+        if(Math.max(v[k],v[k+2])<bounds.x0||Math.min(v[k],v[k+2])>bounds.x1||
+           Math.max(v[k+1],v[k+3])<bounds.z0||Math.min(v[k+1],v[k+3])>bounds.z1)continue;
+        found.push(i);if(found.length>=limit)return found;
+      }
+    }
+    return found;
+  }
+  /* Same road strokes for cached overview and live close-up vectors.
+   * The renderer never clears the destination canvas, allowing offscreen
+   * layers to be composed as finished frames instead of displayed mid-draw. */
+  function paintRoadSegments(ctx,layer,indices,project,{
+    asphalt=true,dirt=true,overview=false,opacity=1
+  }={}){
+    if(!layer||!indices?.length)return 0;
+    const v=layer.values,kinds=layer.kinds;
+    let count=0;
+    ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
+    const layers=[
+      {kind:1,enabled:dirt,outer:'#51483d',inner:'#baaa8b',outerWidth:overview?1.30:2.30,innerWidth:overview ? 0.70 : 1.30},
+      {kind:0,enabled:asphalt,outer:'#46453b',inner:'#cebf97',outerWidth:overview?1.75:3.25,innerWidth:overview ? 1.00 : 2.00}
+    ];
+    for(const style of layers){
+      if(!style.enabled)continue;
+      let plotted=0;
+      ctx.beginPath();
+      for(const i of indices){
+        if(kinds[i]!==style.kind)continue;
+        const k=i*4,a=project(v[k],v[k+1]),b=project(v[k+2],v[k+3]);
+        ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);plotted++;
+      }
+      if(!plotted)continue;
+      ctx.strokeStyle=style.outer;ctx.lineWidth=style.outerWidth;ctx.stroke();
+      ctx.strokeStyle=style.inner;ctx.lineWidth=style.innerWidth;ctx.stroke();
+      count+=plotted;
+    }
+    ctx.restore();
+    return count;
+  }
+
   function parseObjects(input){
     const dv=viewBuffer(input);
     if(dv.byteLength<28||!sig(dv,OBJECTS))throw Error('Invalid DVMOBJ1 structure file header');
@@ -131,12 +203,12 @@
     model.path=path;return path;
   }
   function renderStructures(ctx,layer,{camera,width,height,projection,max=6500,opacity=.95,showWrecks=true,pictureFor=null,requestPicture=null}){
-    if(!layer||camera.zoom<3.8)return{drawn:0,visible:0};
+    if(!layer||camera.zoom<3.8)return{drawn:0,visible:0,pictures:0};
     const p=projection,b0=p.fromScreen(0,height,camera,width,height),b1=p.fromScreen(width,0,camera,width,height);
     const visible=collectVisible(layer,{x0:b0.x,z0:b0.z,x1:b1.x,z1:b1.z},max);
     const metersPerPixel=1/p.scale(camera,width,height);
     ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';
-    let drawn=0;
+    let drawn=0,pictures=0;
     for(const index of visible){
       const item=layer.placements[index],model=layer.models[item.model],spread=Math.max(item.x1-item.x0,item.z1-item.z0);
       if(model.flags&2 && camera.zoom<6)continue;
@@ -154,14 +226,14 @@
         const t=model.matrix;
         ctx.save();ctx.transform(t[0],t[1],t[2],t[3],t[4],t[5]);
         ctx.drawImage(photo,0,0,model.width,model.height);ctx.restore();
-        ctx.stroke(shape);
+        ctx.stroke(shape);pictures++;
       }else{
         ctx.fill(shape);ctx.stroke(shape);
         if(hasPicture&&requestPicture)requestPicture(item.model);
       }
       ctx.restore();drawn++
     }
-    ctx.restore();return{drawn,visible:visible.length}
+    ctx.restore();return{drawn,visible:visible.length,pictures}
   }
-  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures};
+  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures,buildRoadIndex,collectRoadSegments,paintRoadSegments};
 });

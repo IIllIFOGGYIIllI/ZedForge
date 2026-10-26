@@ -4,6 +4,18 @@
 
 This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
+## Stability update — road flicker fix
+
+The previous renderer drew every road segment on the visible canvas on each pan/zoom frame with a desynchronized canvas context. On real maps, that could show the road overlay flashing or disappearing intermittently. The renderer now:
+
+- Uses a **synchronized visible canvas**, so partial drawings are not exposed.
+- Composites a **fully rendered 3072px cached road layer** when zoomed out.
+- Uses a **64 × 64 road spatial index** and draws only viewport-intersecting segments at close zoom.
+- Reduces the stark white road styling at overview zoom and preserves separate paved/dirt filters.
+- Shows a count of building model pictures actually drawn at close zoom, not just files loaded.
+
+Visual verification on the user's machine remains important. This update was triggered by the road flickering visible in the recorded 26 October test.
+
 ## Major v0.3.3 map improvements
 
 - Import **real native paved and dirt roads** from the locally supplied `nasdara.roads` binary (47,236 segments in the publicly documented reference dataset).

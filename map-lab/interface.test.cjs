@@ -48,4 +48,26 @@ check('Top-down building imagery uses a local ZIP and lazy decoding',()=>{
  assert(app.includes('loadPictureFiles'));assert(app.includes("cache.read('pictures')"));assert(app.includes('PICTURE_BUDGET'));
  assert(mapdata.includes('ctx.drawImage(photo'));assert(mapdata.includes('model.matrix'));
 });
+
+check('Roads are composited from a complete cached layer at wide zoom',()=>{
+ assert(app.includes('rebuildRoadOverview'));
+ assert(app.includes('roadOverview=off'));
+ assert(app.includes('ctx.drawImage(roadOverview'));
+ assert(app.includes('ROAD_OVERVIEW_RES'));
+});
+check('Close-up roads use spatial viewport queries rather than full-map redraw',()=>{
+ assert(app.includes('M.collectRoadSegments(layer,r'));
+ assert(app.includes('M.paintRoadSegments(ctx,layer,visible'));
+ assert(mapdata.includes('buildRoadIndex'));
+ assert(mapdata.includes('collectRoadSegments'));
+});
+check('Main canvas is synchronized to prevent partially displayed frames',()=>{
+ assert(!app.includes('desynchronized:true'));
+ assert(app.includes("getContext('2d',{alpha:false})"));
+});
+check('Building picture visibility has a real rendering counter',()=>{
+ assert(app.includes('textured roofs'));
+ assert(mapdata.includes('pictures++'));
+});
+
 console.log('\n'+passed+' Map Lab interface checks passed.');

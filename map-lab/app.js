@@ -3,11 +3,29 @@
 (() => {
   const P=window.ZedForgeProjection,M=window.ZedForgeMapData;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
-  const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
+  const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
     markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null};
+    roadLayer:null,objectLayer:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
+  /* Draw roads once into a transparent back buffer; never expose an
+   * incomplete frame on the visible canvas. At close zoom only viewport
+   * segments are painted using the precomputed spatial index. */
+  let roadOverview=null;
+  const ROAD_OVERVIEW_RES=3072,ROAD_DETAIL_ZOOM=5;
+  function rebuildRoadOverview(){
+    const layer=state.roadLayer;
+    if(!layer){roadOverview=null;return}
+    const off=document.createElement('canvas');
+    off.width=ROAD_OVERVIEW_RES;off.height=ROAD_OVERVIEW_RES;
+    const offctx=off.getContext('2d',{alpha:true});
+    if(!offctx)throw Error('Unable to allocate road overlay canvas');
+    const indices=Array.from({length:layer.count},(_,i)=>i),factor=ROAD_OVERVIEW_RES/EXTENT;
+    M.paintRoadSegments(offctx,layer,indices,(x,z)=>({x:x*factor,y:(EXTENT-z)*factor}),{
+      asphalt:state.showAsphalt,dirt:state.showDirt,overview:true,opacity:1
+    });
+    roadOverview=off; // Atomic swap only after complete drawing.
+  }
   const cache=window.ZedForgeMapStorage;
   /* Deep-zoom building pictures remain user-supplied. Lazy decoding limits RAM usage. */
   const pictureSources=new Map(),pictureDecoded=new Map(),pictureQueue=[],pictureQueued=new Set();
@@ -239,28 +257,26 @@
   }
   function drawRoads(){
     const layer=state.roadLayer;
-    if(!state.showRoads||!layer||state.camera.zoom<1.4)return;
-    const v=visibleExtent(),scale=P.scale(state.camera,state.width,state.height),data=layer.values,types=layer.kinds;
-    ctx.save();ctx.globalAlpha=state.overlayAlpha;ctx.lineJoin='round';ctx.lineCap='round';
-    const passes=[[1,state.showDirt,'#302a24','#efe0cf'],[0,state.showAsphalt,'#302923','#ffe09b']];
-    for(const [kind,enabled,outline,fill] of passes){
-      if(!enabled)continue;
-      ctx.beginPath();let used=0;
-      for(let i=0;i<layer.count;i++){
-        if(types[i]!==kind)continue;
-        const k=i*4,x1=data[k],z1=data[k+1],x2=data[k+2],z2=data[k+3];
-        if(Math.max(x1,x2)<v.x0||Math.min(x1,x2)>v.x1||Math.max(z1,z2)<v.z0||Math.min(z1,z2)>v.z1)continue;
-        const a=toS(x1,z1),b=toS(x2,z2);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);used++;
-      }
-      if(!used)continue;
-      ctx.strokeStyle=outline;ctx.lineWidth=state.camera.zoom>12?3.7:3;ctx.stroke();
-      ctx.strokeStyle=fill;ctx.lineWidth=state.camera.zoom>12?2.3:1.6;ctx.stroke();
+    if(!state.showRoads||!layer||state.camera.zoom<1.25)return;
+    const r=visibleExtent(),zoom=state.camera.zoom;
+    if(zoom<ROAD_DETAIL_ZOOM&&roadOverview){
+      const tl=toS(0,EXTENT),br=toS(EXTENT,0);
+      ctx.save();
+      ctx.globalAlpha=state.overlayAlpha*(zoom<2.3 ? 0.44 : zoom<3.6 ? 0.58 : 0.72);
+      ctx.imageSmoothingEnabled=true;
+      ctx.drawImage(roadOverview,tl.x,tl.y,br.x-tl.x,br.y-tl.y);
+      ctx.restore();
+      return;
     }
-    ctx.restore();
+    const visible=M.collectRoadSegments(layer,r,100000);
+    M.paintRoadSegments(ctx,layer,visible,(x,z)=>toS(x,z),{
+      asphalt:state.showAsphalt,dirt:state.showDirt,overview:false,
+      opacity:state.overlayAlpha*Math.min(1,.67+zoom*.025)
+    });
   }
   function drawStructures(){
-    if(!state.showStructures||!state.objectLayer)return;
-    M.renderStructures(ctx,state.objectLayer,{camera:state.camera,width:state.width,height:state.height,projection:P,opacity:state.overlayAlpha,max:7500,pictureFor,requestPicture});
+    if(!state.showStructures||!state.objectLayer){state.structureStats={drawn:0,pictures:0,visible:0};return;}
+    state.structureStats=M.renderStructures(ctx,state.objectLayer,{camera:state.camera,width:state.width,height:state.height,projection:P,opacity:state.overlayAlpha,max:7500,pictureFor,requestPicture});
   }
   function updateScale(){
     const wanted=135/P.scale(state.camera,state.width,state.height);
@@ -287,7 +303,10 @@
   function updateLayerInfo(){
     const r=state.roadLayer,o=state.objectLayer,parts=[];
     if(r)parts.push(r.count.toLocaleString()+' road segments');
-    if(o)parts.push(o.count.toLocaleString()+' building placements');
+    if(o){parts.push(o.count.toLocaleString()+' building placements');
+      const st=state.structureStats;
+      if(state.showStructures&&st?.drawn)parts.push(st.drawn.toLocaleString()+' visible • '+(st.pictures||0).toLocaleString()+' textured roofs');
+    }
     if(state.eventSpawns.length)parts.push(state.eventSpawns.length.toLocaleString()+' spawns');
     $('map-layer-count').textContent=parts.length?parts.join(' • '):'Load roads and building geometry for sharper detail';
   }
@@ -386,7 +405,7 @@
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
   for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview']]){
-    $(checkbox).onchange=e=>{state[key]=e.target.checked;schedule();saveView()}
+    $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();schedule();saveView()}
   }
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
   $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();saveView()};
@@ -464,6 +483,7 @@
     const filename=name||file.name||'Imported roads';
     const roads=/\.roads$/i.test(filename)?M.parseRoads(await file.arrayBuffer()):M.parseGeoJSON(JSON.parse(await file.text()));
     state.roadLayer=roads;
+    rebuildRoadOverview();
     $('roads-status').textContent=roads.count.toLocaleString()+' road segments ('+roads.asphalt.toLocaleString()+' paved / '+roads.dirt.toLocaleString()+' dirt) • '+filename;
     if(!restored){interacted=true;void cacheLayer('roads',{blob:file,name:filename},'roads')}
     schedule();notify('Loaded '+roads.count.toLocaleString()+' accurate road segments');return roads;
