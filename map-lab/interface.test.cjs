@@ -4,14 +4,19 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),places=load('places.js'),services=load('services.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),places=load('places.js'),services=load('services.js'),accuracy=load('accuracy.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
 check('All JavaScript sources are local and present',()=>{
- assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('./places.js'));assert(scripts.includes('./services.js'));assert(scripts.includes('../vendor/jszip.min.js'));
+ assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('./places.js'));assert(scripts.includes('./services.js'));assert(scripts.includes('./accuracy.js'));assert(scripts.includes('../vendor/jszip.min.js'));
  assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
  for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
+});
+check('Grid accuracy source labelling and audit controls are provided',()=>{
+ for(const id of ['show-accuracy-bounds','location-quality','export-accuracy'])assert(html.includes('id="'+id+'"'));
+ for(const phrase of ['ZedForgeAccuracy','drawAccuracyBoundary','ACC.csvAudit','updateAccuracyReadout'])assert(app.includes(phrase));
+ assert(accuracy.includes('gridBounds'));assert(accuracy.includes('official-structure'));
 });
 check('Map Lab source contains no automatic remote image requests',()=>{assert(!/fetch\((['"])(https?:)/.test(app));assert(!/<script[^>]*src="https?:/.test(html))});
 check('All referenced element IDs are present',()=>{

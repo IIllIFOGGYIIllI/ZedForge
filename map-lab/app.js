@@ -1,11 +1,11 @@
 'use strict';
 /* ZedForge Map Lab — browser-only Nasdara prototype; no proprietary map assets shipped. */
 (() => {
-  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced,PL=window.ZedForgePlaces,S=window.ZedForgeServices;
+  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced,PL=window.ZedForgePlaces,S=window.ZedForgeServices,ACC=window.ZedForgeAccuracy;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
-    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:false,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
+    markers:[],cursor:null,selected:null,selectedLocation:null,showAccuracyBounds:true,drag:null,pointerDown:null,showRoads:true,showSpawns:false,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
     roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0},poiIndex:A.groupPoints(PL?.points||[]),serviceIndex:A.groupPoints(S?.points||[]),serviceHits:[],searchResults:[],treeIndex:null,nativeTreePoints:[],manualTreePoints:[],showServices:true,showFuel:true,showMedical:true,showEmergency:true,showWaterFacilities:true,showInfrastructure:true,showPois:true,showVillages:true,showMilitary:true,showIndustry:true,showTrees:true,calibration:{dx:0,dz:0},candidateCalibration:null};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
 
@@ -362,6 +362,27 @@
     ctx.restore();
   }
 
+  function updateAccuracyReadout(loc){
+    const p=loc?ACC.provenance(loc):null;
+    $('location-quality').textContent=p
+      ?p.label+' • '+p.detail
+      :'Manual map coordinates • use a mapped search result to see its source and positional accuracy.';
+  }
+  function drawAccuracyBoundary(){
+    if(!state.showAccuracyBounds||!state.selectedLocation)return;
+    const area=ACC.gridBounds(state.selectedLocation);
+    if(!area)return;
+    const topLeft=toS(area.x0,area.z1),bottomRight=toS(area.x1,area.z0);
+    const width=bottomRight.x-topLeft.x,height=bottomRight.y-topLeft.y;
+    if(width<=0||height<=0)return;
+    ctx.save();
+    ctx.fillStyle='rgba(246,194,93,.14)';
+    ctx.fillRect(topLeft.x,topLeft.y,width,height);
+    ctx.strokeStyle='#ffd184';ctx.lineWidth=2;ctx.setLineDash([7,4]);
+    ctx.strokeRect(topLeft.x,topLeft.y,width,height);
+    ctx.setLineDash([]);ctx.restore();
+  }
+
   function refreshPOISearch(){
     const target=$('poi-results');target.replaceChildren();
     const places=state.poiIndex,facilities=state.serviceIndex;
@@ -488,7 +509,7 @@
       const session={
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
-          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees,villages:state.showVillages,military:state.showMilitary,industry:state.showIndustry,services:state.showServices,fuel:state.showFuel,medical:state.showMedical,emergency:state.showEmergency,waterFacilities:state.showWaterFacilities,infrastructure:state.showInfrastructure},
+          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees,villages:state.showVillages,military:state.showMilitary,industry:state.showIndustry,services:state.showServices,fuel:state.showFuel,medical:state.showMedical,emergency:state.showEmergency,waterFacilities:state.showWaterFacilities,infrastructure:state.showInfrastructure,accuracyBounds:state.showAccuracyBounds},
         satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,roadWidthMeters:state.roadWidthMeters,vegetationDetail:state.vegetationDetail,calibration:state.calibration,
         filter:$('event-filter').value
       };
@@ -574,7 +595,7 @@
         }
         state.markers=Array.isArray(session.markers)?session.markers.filter(m=>m&&P.validateWorld(m.x,m.z)).slice(0,5000).map(m=>({x:m.x,z:m.z,label:typeof m.label==='string'?m.label.slice(0,60):''})):[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;
         state.selected=session.selected&&P.validateWorld(session.selected.x,session.selected.z)?session.selected:null;
-        for(const [id,key]of [['show-roads','roads'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees'],['show-villages','villages'],['show-military','military'],['show-industry','industry'],['show-services','services'],['show-fuel','fuel'],['show-medical','medical'],['show-emergency','emergency'],['show-water-facilities','waterFacilities'],['show-infrastructure','infrastructure']]){
+        for(const [id,key]of [['show-roads','roads'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees'],['show-villages','villages'],['show-military','military'],['show-industry','industry'],['show-services','services'],['show-fuel','fuel'],['show-medical','medical'],['show-emergency','emergency'],['show-water-facilities','waterFacilities'],['show-infrastructure','infrastructure'],['show-accuracy-bounds','accuracyBounds']]){
           if(typeof session.flags?.[key]==='boolean'){$(id).checked=session.flags[key];state['show'+key[0].toUpperCase()+key.slice(1)]=session.flags[key]}
         }
       }
@@ -784,10 +805,11 @@
     const start=Date.now();
     ctx.setTransform(state.dpr,0,0,state.dpr,0,0);
     ctx.fillStyle='#0d1e26';ctx.fillRect(0,0,state.width,state.height);
-    drawImage();drawTiles();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawTrees();drawEvents();drawLocations();drawServices();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo();metrics(start)
+    drawImage();drawTiles();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawTrees();drawEvents();drawAccuracyBoundary();drawLocations();drawServices();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo();metrics(start)
   }
   function setCamera(next){state.camera=next;updateZoom();schedule();invalidateStructures();saveView()}
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
+    state.selectedLocation=null;updateAccuracyReadout(null);
     state.selected={x:p.x,z:p.z};coordsInSidebar(p);setCamera(P.view(p.x,p.z,Math.max(2.5,state.camera.zoom)));
     $('selected-readout').textContent='Selected X '+fmt(p.x)+' • Z '+fmt(p.z)
   }
@@ -824,6 +846,7 @@
         }
       }else{
         const site=e.shiftKey?null:hitService(e),selection=site||p;
+        state.selectedLocation=site||null;updateAccuracyReadout(site);
         state.selected={x:selection.x,z:selection.z};coordsInSidebar(selection);
         $('selected-readout').textContent=site
           ?site.name+' • X '+fmt(site.x)+' • Z '+fmt(site.z)
@@ -844,7 +867,7 @@
   $('zoom-in').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom*1.6,state.width,state.height));
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
-  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees'],['show-villages','showVillages'],['show-military','showMilitary'],['show-industry','showIndustry'],['show-services','showServices'],['show-fuel','showFuel'],['show-medical','showMedical'],['show-emergency','showEmergency'],['show-water-facilities','showWaterFacilities'],['show-infrastructure','showInfrastructure']]){
+  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees'],['show-villages','showVillages'],['show-military','showMilitary'],['show-industry','showIndustry'],['show-services','showServices'],['show-fuel','showFuel'],['show-medical','showMedical'],['show-emergency','showEmergency'],['show-water-facilities','showWaterFacilities'],['show-infrastructure','showInfrastructure'],['show-accuracy-bounds','showAccuracyBounds']]){
     $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();if(key==='showStructures')invalidateStructures(0);schedule();saveView()}
   }
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
@@ -881,11 +904,17 @@
     if(i===null||i<0||i>=state.markers.length)return notify('Select a saved marker from the list first');
     if(!p)return notify('Enter valid X/Z coordinates');
     state.markers[i]={x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3)),label:$('marker-label').value.trim().slice(0,60)};
+    state.selectedLocation=null;updateAccuracyReadout(null);
     state.selected={x:p.x,z:p.z};interacted=true;
     renderMarkerList();saveView();schedule();notify('Marker '+(i+1)+' updated')
   };
   $('copy-coords').onclick=async()=>{const p=inputCoords();if(!p)return notify('Enter valid X/Z coordinates');try{await navigator.clipboard.writeText(fmt(p.x)+' '+fmt(p.z));notify('Coordinates copied')}catch{notify('Clipboard unavailable; select X/Z from the coordinate fields')}};
   $('clear-markers').onclick=()=>{if(!state.markers.length)return;if(!confirm('Clear '+state.markers.length+' local markers?'))return;state.markers=[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;interacted=true;renderMarkerList();saveView();schedule()};
+  $('export-accuracy').onclick=()=>{
+    const data=ACC.csvAudit(state.poiIndex?.points||[],state.serviceIndex?.points||[]);
+    download(new Blob([data],{type:'text/csv;charset=utf-8'}),'ZedForge_Nasdara_Location_Accuracy.csv');
+    notify('Exported place and facility coordinates with source accuracy notes');
+  };
   $('export-markers').onclick=()=>{
     if(!state.markers.length)return notify('Add markers before exporting');
     const csv=s=>'"'+String(s??'').replaceAll('"','""')+'"';const output='index,label,x,z\n'+state.markers.map((m,i)=>[i+1,csv(m.label),m.x,m.z].join(',')).join('\n')+'\n';
@@ -998,13 +1027,21 @@
   $('poi-results').onchange=e=>{
     const index=Number(e.target.value),loc=state.searchResults[index];
     if(!loc)return;
+    state.selectedLocation=loc;updateAccuracyReadout(loc);
     state.selected={x:loc.x,z:loc.z};coordsInSidebar(loc);
     setCamera(P.view(loc.x,loc.z,Math.max(loc.permanent?7:4,state.camera.zoom)));
     $('selected-readout').textContent=loc.name+' • '+(loc.approximate
-      ?'approx. 100 m grid '+loc.grid
+      ?'approx. 100 m grid '+loc.grid+' (±50 m per axis)'
       :'X '+fmt(loc.x)+' / Z '+fmt(loc.z));
     if(loc.permanent){
-      state.showServices=true;$('show-services').checked=true;schedule();saveView();
+      state.showServices=true;$('show-services').checked=true;
+      const typeFilter=loc.kind==='fuel'?['showFuel','show-fuel']:
+        loc.kind==='medical'?['showMedical','show-medical']:
+        (loc.kind==='police'||loc.kind==='fire')?['showEmergency','show-emergency']:
+        loc.kind==='watertower'?['showWaterFacilities','show-water-facilities']:
+        ['showInfrastructure','show-infrastructure'];
+      state[typeFilter[0]]=true;$(typeFilter[1]).checked=true;
+      schedule();saveView();
     }
   };
   $('tile-file').addEventListener('change',async e=>{
@@ -1026,16 +1063,16 @@
       if(!state.image)throw Error('Load the base satellite image before checking pixel alignment');
       const result=A.parseCalibration(await file.text(),state.image.width,state.image.height);
       state.candidateCalibration=result;
-      const safe=result.rms<=20&&Math.abs(result.dx)<=500&&Math.abs(result.dz)<=500;
+      const safe=result.rms<=20&&result.maxError<=40&&Math.abs(result.dx)<=500&&Math.abs(result.dz)<=500;
       $('apply-calibration').disabled=!safe;
       $('calibration-status').textContent=result.count+' verified landmarks • suggested image shift X '+
-        result.dx.toFixed(2)+' m, Z '+result.dz.toFixed(2)+' m • residual RMS '+result.rms.toFixed(2)+' m'+
+        result.dx.toFixed(2)+' m, Z '+result.dz.toFixed(2)+' m • residual RMS '+result.rms.toFixed(2)+' m • worst '+result.maxError.toFixed(2)+' m'+
         (safe?' • ready to apply':' • inconsistent or excessive offset; cannot apply automatically');
     }catch(err){state.candidateCalibration=null;$('apply-calibration').disabled=true;notify('Landmark alignment: '+err.message)}
   });
   $('apply-calibration').onclick=()=>{
     const result=state.candidateCalibration;
-    if(!result||result.rms>20||Math.abs(result.dx)>500||Math.abs(result.dz)>500)return;
+    if(!result||result.rms>20||result.maxError>40||Math.abs(result.dx)>500||Math.abs(result.dz)>500)return;
     state.calibration={dx:result.dx,dz:result.dz};interacted=true;
     $('calibration-status').textContent='Applied measured image offset X '+result.dx.toFixed(2)+' m, Z '+result.dz.toFixed(2)+' m • residual RMS '+result.rms.toFixed(2)+' m';
     saveView();schedule();notify('Satellite alignment offset applied • roads and buildings remain in native world coordinates');

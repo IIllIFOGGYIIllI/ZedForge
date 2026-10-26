@@ -16,6 +16,7 @@
 <script src="./advanced.js" defer></script>
 <script src="./places.js" defer></script>
 <script src="./services.js" defer></script>
+<script src="./accuracy.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
@@ -91,6 +92,8 @@
   <input id="poi-search" type="search" placeholder="Town, fuel, hospital, police…" autocomplete="off">
   <select id="poi-results" class="poi-results" size="4" aria-label="Matching map locations"></select>
   <div class="data-state" id="poi-search-status">78 permanent Nasdara locations ready • type to search</div>
+  <div class="data-state accuracy-panel" id="location-quality" role="status">78 place labels use approximate 100 m grid centres; 109 building locations use official mission coordinates.</div>
+  <label class="toggle sub-toggle"><input id="show-accuracy-bounds" type="checkbox" checked> Highlight selected 100 m map square <span>approximate labels only</span></label>
   <label class="field" for="satellite-tone">Satellite appearance</label>
   <select id="satellite-tone"><option value="natural">Natural colours</option><option value="vivid">Enhanced detail</option><option value="lowlight">Darkened tactical</option></select>
   <label class="field" for="overlay-alpha">Overlay strength <output id="overlay-alpha-value">85%</output></label>
@@ -113,6 +116,10 @@
   <div class="button-row"><button id="update-marker" class="secondary" disabled>Update selected marker</button></div>
   <div class="button-row"><button id="copy-coords" class="secondary">Copy X/Z</button><button id="export-markers" class="secondary">Export CSV</button></div>
   <div class="button-row"><button id="clear-markers" class="subtle">Clear markers</button></div>
+  <div class="tool-divider"></div>
+  <div class="section-label">LOCATION SOURCE AUDIT</div>
+  <p class="hint">Export the built-in and imported coordinates with their source and precision. A grid-square centre is not an exact building entrance.</p>
+  <div class="button-row"><button id="export-accuracy" class="secondary">Export location accuracy CSV</button></div>
   <div class="tool-divider"></div>
   <div class="section-label">DISTANCE MEASUREMENT</div>
   <div class="button-row"><button id="measure-toggle" class="secondary">Measure distance</button><button id="measure-reset" class="secondary">Clear measurement</button></div>

@@ -49,6 +49,21 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
+## Nasdara interactive map v0.6.0 — coordinate provenance
+
+This version distinguishes **78 approximate community 100 m map-grid centres**
+from **109 native mission-structure coordinates**. Selecting an approximate
+place highlights its exact source grid square and explains its positional
+uncertainty (±50 m per world axis). The source-audit CSV exports both datasets
+and any user-imported overrides without incorrectly marking user-provided
+coordinates as independently verified.
+
+Satellite alignment now requires **RMS ≤20 m and worst individual landmark
+error ≤40 m**, alongside existing ±500 m shift limits. Hidden facility
+categories are revealed when selected from search. Missing high-resolution
+terrain imagery and full forest-tree positions are still external data
+dependencies, not invented by the app.
+
 ## Nasdara interactive map v0.5.1
 
 Map Lab now includes **109 fixed facilities mapped directly from the

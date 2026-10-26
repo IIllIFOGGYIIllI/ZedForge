@@ -4,7 +4,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
-const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js'),SV=require('./services.js');
+const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js'),SV=require('./services.js'),ACC=require('./accuracy.js');
 async function main(){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
  const listeners=[],frames=[],labelStrokes=[];
@@ -48,7 +48,7 @@ async function main(){
  };
  const win={
   ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeVegetation:{makeOverlay:()=>({canvas:node('mask')})},
-  ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeServices:SV,ZedForgeMapStorage:storage,
+  ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeServices:SV,ZedForgeAccuracy:ACC,ZedForgeMapStorage:storage,
   JSZip:{loadAsync:async()=>zip},
   addEventListener(type,fn){listeners.push({id:'window',type,fn})}
  };
@@ -92,12 +92,22 @@ async function main(){
  const facility=SV.points.find(x=>x.kind==='fuel');
  assert(elements.get('selected-readout').textContent.includes('Fuel station'));
  assert(elements.get('selected-readout').textContent.includes('X '));
+ assert(elements.get('location-quality').textContent.includes('Official mission building coordinate'));
  console.log('PASS selecting a permanent facility jumps to its exact game coordinates');
  handler('map-canvas','pointermove')({clientX:550,clientY:335,button:0});
  assert(elements.get('service-tooltip').textContent.includes('Fuel station'),
    'Hovering over a facility should show its actual building');
  assert.equal(elements.get('service-tooltip').hidden,false);
  console.log('PASS facility symbols reveal hover details at close zoom');
+ elements.get('poi-search').value='Nasdara';elements.get('poi-search').oninput();
+ const capitalChoice=elements.get('poi-results').options.findIndex(x=>x.text.startsWith('Nasdara •'));
+ assert(capitalChoice>=0);
+ elements.get('poi-results').onchange({target:{value:String(capitalChoice)}});flush();
+ assert(elements.get('location-quality').textContent.includes('Approximate 100 m grid square'));
+ assert(elements.get('selected-readout').textContent.includes('±50 m per axis'));
+ assert(elements.get('show-accuracy-bounds').checked);
+ elements.get('export-accuracy').onclick();
+ console.log('PASS selected map-grid places disclose their 100m uncertainty and export source audit');
  const satellite={name:'nasdara.png',type:'image/png',size:10000};
  await handler('image-file')({target:{files:[satellite],value:'nasdara.png'}});
  flush();
@@ -129,6 +139,14 @@ async function main(){
  elements.get('reset-calibration').onclick();
  assert(elements.get('calibration-status').textContent.includes('restored'));
  console.log('PASS two verified landmarks measure, apply and reset image offset');
+ const rows=['name,x,z,pixelX,pixelY'];
+ for(let i=0;i<25;i++){const x=1000+i*100,z=4000+i*100;rows.push('Site'+i+','+x+','+z+','+x/4+','+(16384-z)/4)}
+ rows.push('Bad,8000,8000,1985,2096'); // 60m disagreement, RMS under 20m.
+ const inconsistent={name:'outlier.csv',size:200,text:async()=>rows.join('\n')};
+ await handler('calibration-file')({target:{files:[inconsistent],value:'outlier.csv'}});
+ assert(elements.get('calibration-status').textContent.includes('worst'));
+ assert.equal(elements.get('apply-calibration').disabled,true);
+ console.log('PASS isolated severe landmark errors block calibration even when overall RMS is low');
  const tiles={name:'nasdara-tiles.zip',size:5000};
  await handler('tile-file')({target:{files:[tiles],value:'nasdara-tiles.zip'}});
  flush();

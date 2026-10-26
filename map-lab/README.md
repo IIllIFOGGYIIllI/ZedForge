@@ -1,4 +1,32 @@
-# Nasdara interactive map — permanent facility release (v0.5.1)
+# Nasdara interactive map — accuracy and provenance (v0.6.0)
+
+**The ZedForge map is standalone. The World War Z website is not modified.**
+
+## Map accuracy and source audit (v0.6.0)
+
+- Bundled names: **78 approximate** positions calculated from published
+  100 m map-grid squares; clicking a searched settlement highlights its
+  actual 100 m source cell. The centre is not a surveyed entrance.
+- Mission facilities: **109 structure placements** using game X/Z coordinates,
+  with **no invented repair-centre pins**. A building coordinate does not
+  guarantee fuel, drinking water, or an operating service.
+- User-imported location overrides are explicitly marked as user supplied,
+  **not independently verified**, even when their X/Z coordinates are precise.
+- **Export location accuracy CSV** captures the current named places and
+  official facilities, including source, model where applicable, and
+  coordinate-quality notes. CSV fields are protected from spreadsheet formulas.
+- Search-selection automatically unhides a facility category where needed.
+- Satellite landmark translation is refused if the overall residual RMS
+  exceeds **20 m** or any one residual exceeds **40 m**. The shift cap remains
+  500 m per axis. This catches isolated bad alignment points that a low average
+  RMS could otherwise conceal.
+
+**Still dependent on external data:** authentic higher-resolution source
+satellite imagery, complete forest tree positions, and independent checks for
+the placement of individual town centres. Do not mistake a rendering enhancement
+or enlarged 4096-pixel image for newly surveyed terrain data.
+
+## Previous facility release (v0.5.1)
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
 
@@ -167,7 +195,8 @@ base image is loaded.
 Import a CSV with columns `name,x,z,pixelX,pixelY`. For at least two
 verified landmarks, Map Lab computes the median image translation (metres)
 and residual RMS error. **The offset can be applied only when the RMS
-is 20 metres or less and each offset component is within 500 metres**.
+is 20 metres or less, no individual error exceeds 40 metres, and each offset
+component is within 500 metres**.
 
 Only the satellite imagery is shifted. Road geometry, buildings, markers,
 town labels and game coordinates remain in original world X/Z. If image

@@ -90,3 +90,8 @@ label[hidden],select[hidden],div[hidden]{display:none!important}
 }
 .service-tooltip[hidden]{display:none!important}
 #show-services,#show-fuel,#show-medical,#show-emergency,#show-water-facilities,#show-infrastructure{accent-color:var(--accent)}
+
+/* Coordinate provenance and approximate place-name uncertainty, v0.6.0. */
+.accuracy-panel{margin-top:8px;padding:10px 12px;border:1px solid #5d5540;border-left:3px solid #f1c27d;border-radius:7px;background:#29271f;color:#f5e6c9;line-height:1.55}
+#show-accuracy-bounds{accent-color:#f1c27d}
+#export-accuracy{border-color:#746445;color:#f5dfb0}
