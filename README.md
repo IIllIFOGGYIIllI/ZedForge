@@ -49,12 +49,12 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
-## Nasdara interactive map v0.5.0
+## Nasdara interactive map v0.5.1
 
-Map Lab now includes **115 fixed facilities mapped directly from the
+Map Lab now includes **109 fixed facilities mapped directly from the
 official Nasdara mission configuration** alongside its 78 built-in
 permanent place names. Fuel stations, medical buildings, police and
-fire stations, water towers, repair centres and a radio building have
+fire stations, water towers and a radio building have
 distinct map symbols and category toggles; they can all be searched,
 hovered and selected at native X/Z coordinates.
 
@@ -62,6 +62,8 @@ Dynamic events and vehicle spawn pins remain excluded pending proper
 event icons. The stable yellow road lines, building layer, corrected
 grid labels, satellite and local user data are preserved. Facility
 locations do not guarantee active fuel, water or services.
+The six built-in repair workshop pins have been removed; user-defined vehicle
+repair centres can be added later at their actual locations.
 
 ## Nasdara Map Lab v0.4.2
 

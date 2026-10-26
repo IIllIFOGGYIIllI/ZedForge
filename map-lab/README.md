@@ -1,10 +1,10 @@
-# Nasdara interactive map — permanent facility release (v0.5.0)
+# Nasdara interactive map — permanent facility release (v0.5.1)
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
 
-## Built-in permanent facilities (v0.5.0)
+## Built-in permanent facilities (v0.5.1)
 
-The map now loads **115 permanent facility positions** automatically from
+The map now loads **109 permanent facility positions** automatically from
 Bohemia Interactive's public Nasdara central-economy mission file
 [`mapgrouppos.xml`](https://github.com/BohemiaInteractive/DayZ-Central-Economy/blob/master/dayzOffline.nasdara/mapgrouppos.xml),
 in addition to the existing 78 built-in place names. Facilities are real
@@ -16,11 +16,13 @@ map squares, event locations or active resource reports**.
 - **19** police stations
 - **11** fire stations
 - **28** water towers (potable water access not guaranteed)
-- **6** vehicle repair centres
 - **1** radio building
 
-122 individual official model positions were screened; seven duplicate
-fuel-site structures within 45 metres were merged into a single icon.
+122 individual official model positions were screened. Six official repair
+workshop structures are intentionally excluded, and seven duplicate fuel-site
+structures within 45 metres are merged into a single icon.
+Vehicle repair centres are user-defined and will be mapped at their actual
+locations when provided, not inferred from unrelated existing buildings.
 This derived coordinate index does not reproduce the source mission XML.
 The source snapshot is Git blob
 `44b32f032cc85b8ffdde94deda70b455d3fc94bb`.

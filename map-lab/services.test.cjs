@@ -6,9 +6,9 @@ const S=require('./services.js');
 const A=require('./advanced.js');
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
-check('Permanent service index includes 115 official building sites',()=>{
- assert.equal(S.count,115);assert.equal(S.points.length,115);
- for(const [type,count] of Object.entries({fuel:22,medical:28,police:19,fire:11,watertower:28,repair:6,radio:1}))
+check('Permanent service index includes 109 selected official building sites',()=>{
+ assert.equal(S.count,109);assert.equal(S.points.length,109);
+ for(const [type,count] of Object.entries({fuel:22,medical:28,police:19,fire:11,watertower:28,radio:1}))
   assert.equal(S.grouped[type],count);
 });
 check('Service coordinates are valid native DayZ metres with unique identifiers',()=>{
@@ -19,6 +19,10 @@ check('Service coordinates are valid native DayZ metres with unique identifiers'
   assert(p.permanent===true);
   assert(!ids.has(p.id));ids.add(p.id);
  }
+});
+check('Official repair workshops excluded pending custom locations',()=>{
+ assert(!S.points.some(p=>p.kind==='repair'||p.model==='Land_Repair_Center'));
+ assert(!Object.hasOwn(S.TYPES,'repair'));
 });
 check('Data contains no heli crashes, dynamic vehicles or mission spawns',()=>{
  for(const p of S.points){

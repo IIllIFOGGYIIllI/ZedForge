@@ -77,11 +77,13 @@ async function main(){
  console.log('PASS map typography draws unboxed city text in corrected north-south order');
  assert(elements.get('show-military').checked);
  console.log('PASS all 78 named Nasdara locations are searchable on first load');
- assert.equal(SV.count,115);
+ assert.equal(SV.count,109);
+ assert(!SV.points.some(p=>p.kind==='repair'));
+ assert.equal(SV.points.filter(p=>p.kind==='radio').length,1);
  elements.get('poi-search').value='Fuel station';
  elements.get('poi-search').oninput();
  assert.equal(elements.get('poi-results').options.length,22);
- console.log('PASS 115 permanent source-verified facilities are searchable without user imports');
+ console.log('PASS 109 permanent source-verified facilities are searchable without user imports');
  assert(elements.get('show-fuel').checked);
  assert(elements.get('show-medical').checked);
  assert(elements.get('show-water-facilities').checked);

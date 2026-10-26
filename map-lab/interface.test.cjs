@@ -202,11 +202,13 @@ check('Official fixed facilities are locally bundled and source-attributed',()=>
  assert(services.includes('ZedForgeServices'));
  assert(services.includes('44b32f032cc85b8ffdde94deda70b455d3fc94bb'));
  assert(services.includes("Water tower structure; drinking-water access is not guaranteed"));
- assert(html.includes('115 verified positions'));
+ assert(html.includes('109 verified positions'));
  assert(html.includes('src="./services.js"'));
  assert(app.includes('serviceIndex:A.groupPoints(S?.points||[])'));
+ assert(html.includes('Radio building <span>1'));
+ assert(!services.includes("repair:'Repair centre'"));
 });
-check('Seven facility types have vector map glyphs, hover details and click selection',()=>{
+check('Six retained facility types have vector map glyphs, hover details and click selection',()=>{
  for(const token of ['function drawFacilityGlyph','function drawServices','function hitService','function updateServiceTooltip',
     'function facilityVisible','ctx.fillRect(x-1.6,y-5,3.2,10)','site.name'])
   assert(app.includes(token),'Missing '+token);

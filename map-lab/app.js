@@ -161,7 +161,7 @@
    */
   const FACILITY_COLOURS={
     fuel:'#f0c064',medical:'#f0a0ab',police:'#9fc9f8',
-    fire:'#f5a178',watertower:'#8de3f4',repair:'#b0e0ad',radio:'#d4b5ed'
+    fire:'#f5a178',watertower:'#8de3f4',radio:'#d4b5ed'
   };
   function facilityVisible(kind){
     if(!state.showServices)return false;
@@ -198,10 +198,6 @@
       ctx.strokeStyle='#1b302e';ctx.beginPath();
       ctx.moveTo(x-2.5,y);ctx.lineTo(x-3.5,y+5);
       ctx.moveTo(x+2.5,y);ctx.lineTo(x+3.5,y+5);ctx.stroke();
-    }else if(kind==='repair'){
-      ctx.strokeStyle='#1b302e';ctx.lineWidth=2.4;ctx.beginPath();
-      ctx.moveTo(x-3.7,y+3.7);ctx.lineTo(x+2.8,y-2.8);ctx.stroke();
-      ctx.beginPath();ctx.arc(x+2.7,y-2.7,2.2,0,Math.PI*2);ctx.stroke();
     }else if(kind==='radio'){
       ctx.strokeStyle='#1b302e';ctx.lineWidth=1.35;ctx.beginPath();
       ctx.moveTo(x,y-5);ctx.lineTo(x-4,y+5);ctx.lineTo(x+4,y+5);ctx.closePath();ctx.stroke();
