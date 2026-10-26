@@ -4,7 +4,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
-const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js');
+const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js');
 async function main(){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
  const listeners=[],frames=[];
@@ -48,7 +48,7 @@ async function main(){
  };
  const win={
   ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeVegetation:{makeOverlay:()=>({canvas:node('mask')})},
-  ZedForgeAdvanced:A,ZedForgeMapStorage:storage,
+  ZedForgeAdvanced:A,ZedForgePlaces:PL,ZedForgeMapStorage:storage,
   JSZip:{loadAsync:async()=>zip},
   addEventListener(type,fn){listeners.push({id:'window',type,fn})}
  };
@@ -63,6 +63,12 @@ async function main(){
   assert(found,'Missing '+id+' '+type+' listener');return found.fn
  };
  await Promise.resolve();await Promise.resolve();flush();
+ assert(elements.get('poi-status').textContent.includes('78 permanent Nasdara places ready'));
+ elements.get('poi-search').value='Dashtabad';
+ elements.get('poi-search').oninput();
+ assert.equal(elements.get('poi-results').options.length,2);
+ assert(elements.get('show-military').checked);
+ console.log('PASS all 78 named Nasdara locations are searchable on first load');
  const satellite={name:'nasdara.png',type:'image/png',size:10000};
  await handler('image-file')({target:{files:[satellite],value:'nasdara.png'}});
  flush();
@@ -103,6 +109,6 @@ async function main(){
  console.log('PASS multi-resolution ZIP manifest loads without a server or remote requests');
  assert(!source.includes('fetch('));
  console.log('PASS all new imports are local-only');
- console.log('6 advanced integration checks passed.');
+ console.log('7 advanced integration checks passed.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

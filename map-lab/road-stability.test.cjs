@@ -2,12 +2,12 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=__dirname, source=fs.readFileSync(path.join(root,'app.js'),'utf8'),
-  html=fs.readFileSync(path.join(root,'index.html'),'utf8'),projection=require('./projection.js'),data=require('./mapdata.js');
+  html=fs.readFileSync(path.join(root,'index.html'),'utf8'),projection=require('./projection.js'),data=require('./mapdata.js'),advanced=require('./advanced.js'),places=require('./places.js');
 (async()=>{
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]),events=[],frames=[];
  const counts={bufferStrokes:0,screenStrokes:0,screenImages:0,frames:0};
  const ctx=(id)=>({
-  globalAlpha:1,save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},strokeRect(){},fillRect(){},fill(){},
+  globalAlpha:1,measureText:s=>({width:String(s).length*7}),save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},strokeRect(){},fillRect(){},fill(){},
   arc(){},translate(){},scale(){},setTransform(){},clearRect(){},strokeText(){},fillText(){},setLineDash(){},
   transform(){},rect(){},clip(){},closePath(){},stroke(){counts[id==='buffer'?'bufferStrokes':'screenStrokes']++},
   drawImage(){if(id==='screen')counts.screenImages++}
@@ -24,7 +24,7 @@ const root=__dirname, source=fs.readFileSync(path.join(root,'app.js'),'utf8'),
  }}
  const nodes=new Map(ids.map(id=>[id,element(id)]));
  const document={getElementById:id=>nodes.get(id),createElement:()=>element('buffer'),body:element('body')};
- const window={ZedForgeProjection:projection,ZedForgeMapData:data,
+ const window={ZedForgeProjection:projection,ZedForgeMapData:data,ZedForgeAdvanced:advanced,ZedForgePlaces:places,
   ZedForgeMapStorage:{read:async()=>null,write:async()=>{},remove:async()=>{}},
   addEventListener(type,fn){events.push({id:'window',type,fn})}};
  const raf=fn=>(frames.push(fn),frames.length);

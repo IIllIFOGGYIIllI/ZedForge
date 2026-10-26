@@ -5,14 +5,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const root=__dirname;
 const app=fs.readFileSync(path.join(root,'app.js'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
-const P=require('./projection.js'),M=require('./mapdata.js');
+const P=require('./projection.js'),M=require('./mapdata.js'),A=require('./advanced.js'),PL=require('./places.js');
 const originalPath=global.Path2D;
 global.Path2D=class{moveTo(){}lineTo(){}closePath(){}};
 async function main(){
  const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]),timers=[],frames=[],listeners=[];
  const counts={screenImages:0,paintedStructures:0,frames:0};
  const canvasContext=kind=>{
-  const value={lineWidth:1,font:'11px sans',globalAlpha:1};
+  const value={lineWidth:1,font:'11px sans',globalAlpha:1,measureText:s=>({width:String(s).length*7})};
   for(const name of ['save','restore','beginPath','moveTo','lineTo','strokeRect','fillRect','arc','translate',
    'scale','setTransform','clearRect','strokeText','fillText','setLineDash','transform','rect','clip','closePath','stroke'])
    value[name]=()=>{};
@@ -33,7 +33,7 @@ async function main(){
  }}
  const nodes=new Map(ids.map(id=>[id,node(id)]));
  const document={getElementById:id=>nodes.get(id),createElement:()=>node('buffer'),body:node('body')};
- const window={ZedForgeProjection:P,ZedForgeMapData:M,
+ const window={ZedForgeProjection:P,ZedForgeMapData:M,ZedForgeAdvanced:A,ZedForgePlaces:PL,
    ZedForgeMapStorage:{read:async()=>null,write:async()=>{},remove:async()=>{}},
    addEventListener(type,fn){listeners.push({id:'window',type,fn})}};
  let nextTimerId=1;

@@ -14,6 +14,7 @@
 <script src="./mapdata.js" defer></script>
 <script src="./vegetation.js" defer></script>
 <script src="./advanced.js" defer></script>
+<script src="./places.js" defer></script>
 <script src="./app.js" defer></script>
 </head>
 <body>
@@ -49,12 +50,13 @@
   <input id="pictures-file" type="file" accept=".zip,image/png" multiple hidden>
   <div class="data-state" id="pictures-status">No building pictures loaded; polygons will be shown instead</div>
   <p class="hint source-tip">To add accurate footprints, use the independently published <a class="reference-link" target="_blank" rel="noopener noreferrer" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/blob/main/data/objects/nasdara/nasdara.objects">nasdara.objects</a> file. It contains model outlines. For detailed top-down artwork, add a ZIP of the corresponding <a class="reference-link" target="_blank" rel="noopener noreferrer" href="https://github.com/FeliciaDayZ/DayZ-Vehicle-Map/tree/main/data/objects/nasdara/pictures">numbered model pictures</a> or select the PNG files from that directory. Image decoding is lazy and memory-bounded.</p>
-  <label class="file-button secondary" for="events-file"><span>⌖</span> Add spawn overlay <small>cfgeventspawns.xml • optional</small></label>
+  <label class="file-button secondary" for="events-file" hidden><span>⌖</span> Event overlay pending proper icons <small>Not included in this release</small></label>
   <input id="events-file" type="file" accept=".xml,text/xml,application/xml" hidden>
-  <div class="data-state" id="events-status">No event positions loaded</div>
-  <label class="file-button secondary" for="poi-file"><span>⌖</span> Import place names / locations <small>CSV or GeoJSON • towns, military, fuel, landmarks</small></label>
+  <div class="data-state" id="events-status" hidden>Event icons pending; locations are intentionally omitted.</div>
+  <label class="file-button secondary" for="poi-file"><span>⌖</span> Add or override place locations <small>CSV / GeoJSON • optional precision updates</small></label>
   <input id="poi-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
-  <div class="data-state" id="poi-status">No verified POI locations imported</div>
+  <div class="data-state" id="poi-status">78 named Nasdara locations included • approximate 100 m grid positions</div>
+  <p class="hint source-tip">Included: cities, towns, villages, industrial sites, airfield and military installations. Coordinates are grid-square centres (not exact doorways). <a class="reference-link" href="https://www.nasdaramap.com/guide" target="_blank" rel="noopener noreferrer">Location source</a></p>
   <label class="file-button secondary" for="trees-file"><span>♣</span> Import actual vegetation points <small>CSV / GeoJSON with game X/Z positions</small></label>
   <input id="trees-file" type="file" accept=".csv,.json,.geojson,text/csv,application/json" hidden>
   <div class="data-state" id="trees-status">No tree-position dataset imported • colour enhancement still available</div>
@@ -65,18 +67,21 @@
   <label class="toggle sub-toggle"><input id="show-asphalt" type="checkbox" checked> Paved roads</label>
   <label class="toggle sub-toggle"><input id="show-dirt" type="checkbox" checked> Dirt tracks</label>
   <label class="toggle"><input id="show-structures" type="checkbox" checked> Detailed buildings <span>high zoom • PNG artwork if loaded</span></label>
-  <label class="toggle"><input id="show-spawns" type="checkbox" checked> Imported spawn positions</label>
+  <label class="toggle" hidden><input id="show-spawns" type="checkbox" disabled> Imported event positions <span>icons pending</span></label>
   <label class="toggle"><input id="show-grid" type="checkbox"> Coordinate grid</label>
   <label class="toggle"><input id="show-overview" type="checkbox" checked> Overview navigator</label>
   <label class="toggle"><input id="show-markers" type="checkbox" checked> My markers</label>
-  <label class="toggle"><input id="show-pois" type="checkbox" checked> Towns, places and POI labels</label>
+  <label class="toggle"><input id="show-pois" type="checkbox" checked> Named Nasdara locations <span>78 built in</span></label>
+  <label class="toggle sub-toggle"><input id="show-villages" type="checkbox" checked> Villages</label>
+  <label class="toggle sub-toggle"><input id="show-military" type="checkbox" checked> Military installations</label>
+  <label class="toggle sub-toggle"><input id="show-industry" type="checkbox" checked> Industry and airfields</label>
   <label class="toggle"><input id="show-trees" type="checkbox" checked> Verified trees <span>only if imported</span></label>
-  <label class="field" for="event-filter">Event filter</label>
-  <select id="event-filter"><option value="all">All events</option></select>
+  <label class="field" for="event-filter" hidden>Event filter</label>
+  <select id="event-filter" hidden><option value="all">All events</option></select>
   <label class="field" for="poi-search">Find a mapped location</label>
   <input id="poi-search" type="search" placeholder="Town, airfield, military…" autocomplete="off">
   <select id="poi-results" class="poi-results" size="4" aria-label="Matching map locations"></select>
-  <div class="data-state" id="poi-search-status">Import a named location file to search.</div>
+  <div class="data-state" id="poi-search-status">78 permanent Nasdara locations ready • type to search</div>
   <label class="field" for="satellite-tone">Satellite appearance</label>
   <select id="satellite-tone"><option value="natural">Natural colours</option><option value="vivid">Enhanced detail</option><option value="lowlight">Darkened tactical</option></select>
   <label class="field" for="overlay-alpha">Overlay strength <output id="overlay-alpha-value">85%</output></label>
@@ -136,7 +141,7 @@
    <div class="map-readout" id="cursor-readout">X — • Z —</div>
    <div class="map-credit" id="map-credit">Local imagery only • No imagery bundled</div>
    <div class="frame-metrics" id="frame-metrics" aria-label="Map rendering performance">Rendering ready</div>
-   <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-spawn"></i> Spawn</span></div>
+   <div class="map-legend"><span><i class="legend-road"></i> Paved</span><span><i class="legend-dirt"></i> Dirt</span><span><i class="legend-building"></i> Buildings</span><span><i class="legend-city"></i> Places</span><span><i class="legend-military"></i> Military</span></div>
    <div class="scale-widget"><div id="scale-label">1 km</div><div id="scale-line"></div></div>
    <div id="overview-panel" class="overview-panel"><canvas id="overview-canvas" width="180" height="180" aria-label="Map overview navigator" title="Click to jump to a location"></canvas><span>OVERVIEW</span></div>
    <div id="map-layer-count" class="layer-info" role="status">Satellite image only • Load actual roads and buildings for detail</div>

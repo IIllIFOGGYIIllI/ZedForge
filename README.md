@@ -49,6 +49,15 @@ node tests/studios-tests.mjs
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
 
+## Nasdara Map Lab v0.4.1
+
+The map now **includes 78 permanent named Nasdara places out of the box**
+(approximately centred on published 100 m grid squares). Town, village,
+military, industry, and airfield locations have searchable labels and
+category controls. Event positions remain hidden until proper icons are
+available. Third-party satellite imagery and individual tree datasets
+are not bundled.
+
 ## Nasdara Map Lab v0.4.0
 
 The isolated [Nasdara Map Lab](https://IIllIFOGGYIIllI.github.io/ZedForge/map-lab/) now supports optional local high-resolution tile ZIPs, imported towns/POIs and tree points, search, visual layer toggles, and landmark-based coordinate alignment checks. The standalone [tile pack builder](tools/build_nasdara_tiles.py) converts user-supplied imagery into multiresolution packs; it does not provide or redistribute game assets. The original World War Z website remains unchanged.

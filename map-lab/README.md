@@ -2,6 +2,31 @@
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
 
+## Built-in permanent Nasdara places (v0.4.1)
+
+**78 named locations display automatically** with no extra CSV required:
+**2 cities, 14 towns, 42 villages, 6 industrial districts/sites,
+1 airfield and 13 military installations**. Place names appear with
+category-specific symbols, colours and collision-aware labels; all 78
+can be found in the sidebar search, including when zoomed out.
+
+Source: [Nasdara interactive guide](https://www.nasdaramap.com/guide),
+which lists named places and **100-metre game grid references**.
+To avoid false precision, each map marker uses the **centre of the
+published 100 m square (±50 m per axis)**. These markers are useful
+landmark guides, **not exact surveyed building entrances**.
+User-supplied CSV or GeoJSON coordinates can override any individual
+place by name while retaining the rest of the built-in locations.
+
+Permanent locations are grouped into **Villages**, **Military
+installations**, and **Industry / airfields** filters. Cities and towns
+remain available under the main places toggle.
+
+**No dynamic event or vehicle spawn markers were added.** Their generic
+pin display is disabled until category-appropriate icons and
+classification can be implemented. Existing local event files are
+not modified or deleted.
+
 ## New: one consolidated map upgrade
 
 This release adds **real data-driven place names and forests**, search/navigation,
@@ -229,6 +254,7 @@ node map-lab/road-stability.test.cjs
 node map-lab/building-stability.test.cjs
 node map-lab/vegetation.test.cjs
 node map-lab/advanced.test.cjs
+node map-lab/places.test.cjs
 node map-lab/advanced-integration.test.cjs
 ```
 

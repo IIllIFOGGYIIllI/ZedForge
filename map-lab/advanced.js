@@ -8,7 +8,7 @@
 })(typeof globalThis!=='undefined'?globalThis:null,function(){
  'use strict';
  const EXTENT=16384,MAX_POINTS=100000;
- const allowedKinds=new Set(['town','city','village','military','airfield','fuel','trader','landmark','medical','water','forest','tree','other']);
+ const allowedKinds=new Set(['town','city','village','military','airfield','industrial','fuel','trader','landmark','medical','water','forest','tree','other']);
  const sanitize=s=>String(s??'').replace(/[\x00-\x1f\x7f]/g,' ').trim().slice(0,100);
  const valid=n=>Number.isFinite(n)&&n>=0&&n<=EXTENT;
  function parseCSV(text){

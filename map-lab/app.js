@@ -1,12 +1,12 @@
 'use strict';
 /* ZedForge Map Lab — browser-only Nasdara prototype; no proprietary map assets shipped. */
 (() => {
-  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced;
+  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation,A=window.ZedForgeAdvanced,PL=window.ZedForgePlaces;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
-    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0},poiIndex:null,treeIndex:null,showPois:true,showTrees:false,calibration:{dx:0,dz:0},candidateCalibration:null};
+    markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:false,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
+    roadLayer:null,objectLayer:null,roadVisibility:1.2,roadWidthMeters:8,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0},poiIndex:A.groupPoints(PL?.points||[]),treeIndex:null,showPois:true,showVillages:true,showMilitary:true,showIndustry:true,showTrees:false,calibration:{dx:0,dz:0},candidateCalibration:null};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
 
   /*
@@ -170,39 +170,83 @@
     }
     ctx.restore();
   }
+  /*
+   * Permanent places are indexed locally. The bundled positions are 100 m
+   * grid-square centres, not exact entrance coordinates. User-imported POIs
+   * can override positions by exact name without hiding other locations.
+   */
+  function mergePermanentPlaces(overrides=[]){
+    const records=new Map((PL?.points||[]).map(p=>[p.name.toLocaleLowerCase(),p]));
+    for(const p of overrides)records.set(p.name.toLocaleLowerCase(),p);
+    state.poiIndex=A.groupPoints(Array.from(records.values()));
+    const builtin=PL?.count||0;
+    $('poi-status').textContent=overrides.length
+      ?overrides.length+' named custom places • '+builtin+' built-in Nasdara grid locations • '+state.poiIndex.points.length+' total'
+      :builtin+' permanent Nasdara places ready • 100 m grid-centre coordinates';
+    refreshPOISearch();schedule();
+  }
+  function poiVisible(loc){
+    if(!state.showPois)return false;
+    if(loc.kind==='village'&&!state.showVillages)return false;
+    if(loc.kind==='military'&&!state.showMilitary)return false;
+    if(['industrial','airfield'].includes(loc.kind)&&!state.showIndustry)return false;
+    const zoom=state.camera.zoom;
+    if(loc.kind==='city')return true;
+    if(loc.kind==='town')return zoom>=1.3;
+    if(loc.kind==='military'||loc.kind==='airfield')return zoom>=1.8;
+    if(loc.kind==='industrial')return zoom>=2.1;
+    if(loc.kind==='village')return zoom>=2.7;
+    return zoom>=2.1;
+  }
   function drawLocations(){
     if(!state.showPois||!state.poiIndex)return;
     const visible=A.visiblePoints(state.poiIndex,visibleExtent(),800);
-    const rank={city:0,town:1,airfield:2,military:3,village:4,fuel:5,medical:5,trader:5,water:5,landmark:6,forest:7,other:8};
+    const rank={city:0,town:1,airfield:2,military:3,industrial:4,village:5,fuel:6,medical:6,trader:6,water:6,landmark:7,forest:8,other:9};
+    const symbols={city:'◆',town:'●',village:'·',military:'★',airfield:'✈',industrial:'⚙',
+      fuel:'F',medical:'+',trader:'$',water:'≈',landmark:'◆',forest:'♣',other:'•'};
+    const colors={city:'#f5f7ea',town:'#d0f8e5',village:'#a8dccc',
+      military:'#ffb998',airfield:'#f3d17c',industrial:'#eab8a4',
+      fuel:'#f2dd77',medical:'#ef8e9e',trader:'#ffd078',
+      water:'#75d3ed',landmark:'#c6cee9',forest:'#86c99e',other:'#b2cec8'};
     visible.sort((a,b)=>(rank[a.kind]??9)-(rank[b.kind]??9));
-    ctx.save();ctx.font='bold 12px system-ui';ctx.textBaseline='middle';
+    ctx.save();ctx.textBaseline='middle';
     const boxes=[];let shown=0;
     for(const loc of visible){
-      if((rank[loc.kind]??8)>=7&&state.camera.zoom<3)continue;
-      if(state.camera.zoom<1.3&&(rank[loc.kind]??9)>2)continue;
+      if(!poiVisible(loc))continue;
       const p=toS(loc.x,loc.z);
-      if(p.x<-40||p.x>state.width+40||p.y<-30||p.y>state.height+30)continue;
-      const label=loc.name.slice(0,42),width=Math.min(270,ctx.measureText(label).width+20);
-      const box={x:p.x+7,y:p.y-11,w:width,h:22};
+      if(p.x<-50||p.x>state.width+50||p.y<-30||p.y>state.height+30)continue;
+      const label=loc.name.slice(0,42),major=loc.kind==='city'||loc.kind==='town';
+      ctx.font=major?'bold 12px system-ui':'600 11px system-ui';
+      const width=Math.min(280,ctx.measureText(label).width+21);
+      const box={x:p.x+12,y:p.y-11,w:width,h:22};
       if(boxes.some(b=>box.x<b.x+b.w+6&&box.x+box.w+6>b.x&&box.y<b.y+b.h+5&&box.y+box.h+5>b.y))continue;
       boxes.push(box);
-      ctx.fillStyle='#061d25df';ctx.fillRect(box.x,box.y,box.w,box.h);
-      ctx.strokeStyle='#5caba1';ctx.lineWidth=.7;ctx.strokeRect(box.x,box.y,box.w,box.h);
-      ctx.fillStyle=loc.kind==='military'?'#ffbca3':'#e0fff2';
+      const color=colors[loc.kind]||colors.other;
+      ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);
+      ctx.fillStyle='#0b2229';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.6;ctx.stroke();
+      ctx.font='bold 9px system-ui';ctx.textAlign='center';ctx.fillStyle=color;
+      ctx.fillText(symbols[loc.kind]||'•',p.x,p.y+.6);
+      ctx.textAlign='left';
+      ctx.fillStyle='#061d25eb';ctx.fillRect(box.x,box.y,box.w,box.h);
+      ctx.strokeStyle=major?color:'#5caba1';ctx.lineWidth=major?1:.7;
+      ctx.strokeRect(box.x,box.y,box.w,box.h);
+      ctx.font=major?'bold 12px system-ui':'600 11px system-ui';
+      ctx.fillStyle=color;
       ctx.fillText(label,box.x+8,box.y+11);
       if(++shown>=90)break;
     }
     ctx.restore();
   }
+
   function refreshPOISearch(){
     const target=$('poi-results');target.replaceChildren();
     const index=state.poiIndex;
-    if(!index){$('poi-search-status').textContent='Import a named location file to search.';return}
+    if(!index){$('poi-search-status').textContent='No places available.';return}
     const search=$('poi-search').value.trim();
     if(!search){$('poi-search-status').textContent=index.points.length.toLocaleString()+' searchable locations • enter a place name';return}
     const matches=A.searchPoints(index,search,35);
     for(const p of matches){
-      const option=new Option(p.name+' ('+p.kind+') • '+Math.round(p.x)+', '+Math.round(p.z),String(index.points.indexOf(p)));
+      const option=new Option(p.name+' • '+p.kind+' • '+(p.approximate?'≈ grid '+p.grid:'X '+Math.round(p.x)+' / Z '+Math.round(p.z)),String(index.points.indexOf(p)));
       target.add(option);
     }
     $('poi-search-status').textContent=matches.length+' matches';
@@ -312,7 +356,7 @@
       const session={
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
-          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees},
+          structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview,pois:state.showPois,trees:state.showTrees,villages:state.showVillages,military:state.showMilitary,industry:state.showIndustry},
         satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,roadWidthMeters:state.roadWidthMeters,vegetationDetail:state.vegetationDetail,calibration:state.calibration,
         filter:$('event-filter').value
       };
@@ -398,7 +442,7 @@
         }
         state.markers=Array.isArray(session.markers)?session.markers.filter(m=>m&&P.validateWorld(m.x,m.z)).slice(0,5000).map(m=>({x:m.x,z:m.z,label:typeof m.label==='string'?m.label.slice(0,60):''})):[];state.selectedMarkerIndex=null;$('update-marker').disabled=true;
         state.selected=session.selected&&P.validateWorld(session.selected.x,session.selected.z)?session.selected:null;
-        for(const [id,key]of [['show-roads','roads'],['show-spawns','spawns'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees']]){
+        for(const [id,key]of [['show-roads','roads'],['show-grid','grid'],['show-markers','markers'],['show-structures','structures'],['show-asphalt','asphalt'],['show-dirt','dirt'],['show-overview','overview'],['show-pois','pois'],['show-trees','trees'],['show-villages','villages'],['show-military','military'],['show-industry','industry']]){
           if(typeof session.flags?.[key]==='boolean'){$(id).checked=session.flags[key];state['show'+key[0].toUpperCase()+key.slice(1)]=session.flags[key]}
         }
       }
@@ -423,8 +467,7 @@
         $('calibration-status').textContent='Saved image offset: X '+state.calibration.dx.toFixed(2)+' m, Z '+state.calibration.dz.toFixed(2)+' m';
       }
       if(pois?.text){try{
-        const list=A.parsePoints(pois.text,pois.format,'other');state.poiIndex=A.groupPoints(list);
-        $('poi-status').textContent=list.length.toLocaleString()+' named locations restored';refreshPOISearch();
+        const list=A.parsePoints(pois.text,pois.format,'other');mergePermanentPlaces(list);
       }catch(e){notify('Location layer restore failed: '+e.message)}}
       if(trees?.text){try{
         const list=A.parsePoints(trees.text,trees.format,'tree');state.treeIndex=A.groupPoints(list);
@@ -560,7 +603,7 @@
       const st=state.structureStats;
       if(state.showStructures&&st?.drawn)parts.push(st.drawn.toLocaleString()+' visible • '+(st.pictures||0).toLocaleString()+' textured roofs');
     }
-    if(state.eventSpawns.length)parts.push(state.eventSpawns.length.toLocaleString()+' spawns');
+    // Event positions stay omitted until category-specific icons are implemented.
     if(state.poiIndex)parts.push(state.poiIndex.points.length.toLocaleString()+' named places');
     if(state.treeIndex)parts.push(state.treeIndex.points.length.toLocaleString()+' trees');
     if(tileRuntime.pack)parts.push(tileRuntime.pack.tiles.length.toLocaleString()+' HD tiles');
@@ -585,6 +628,7 @@
     ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=1.2;ctx.stroke()
   }
   function drawEvents(){
+    // Event data may exist in legacy browser storage; never plot generic event dots until icons are available.
     if(!state.showSpawns||!state.eventSpawns.length)return;
     const filter=$('event-filter').value,v=visibleExtent(),zoom=state.camera.zoom,limit=zoom<1.6?1400:6000;let count=0;
     for(const p of state.eventSpawns){if(filter!=='all'&&p.name!==filter)continue;
@@ -661,7 +705,7 @@
   $('zoom-in').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom*1.6,state.width,state.height));
   $('zoom-out').onclick=()=>setCamera(P.anchoredZoom(state.camera,state.width/2,state.height/2,state.camera.zoom/1.6,state.width,state.height));
   $('fit-map').onclick=()=>setCamera(P.view());
-  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees']]){
+  for(const [checkbox,key] of [['show-grid','showGrid'],['show-roads','showRoads'],['show-spawns','showSpawns'],['show-markers','showMarkers'],['show-structures','showStructures'],['show-asphalt','showAsphalt'],['show-dirt','showDirt'],['show-overview','showOverview'],['show-pois','showPois'],['show-trees','showTrees'],['show-villages','showVillages'],['show-military','showMilitary'],['show-industry','showIndustry']]){
     $(checkbox).onchange=e=>{state[key]=e.target.checked;if(key==='showAsphalt'||key==='showDirt')rebuildRoadOverview();if(key==='showStructures')invalidateStructures(0);schedule();saveView()}
   }
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
@@ -793,8 +837,7 @@
       $('trees-status').textContent=list.length.toLocaleString()+' verified tree / vegetation positions • '+file.name;
       state.showTrees=true;$('show-trees').checked=true;
     }else{
-      state.poiIndex=index;
-      $('poi-status').textContent=list.length.toLocaleString()+' named map locations • '+file.name;
+      mergePermanentPlaces(list);
       state.showPois=true;$('show-pois').checked=true;
       refreshPOISearch();
     }
@@ -812,7 +855,11 @@
   $('poi-search').oninput=refreshPOISearch;
   $('poi-results').onchange=e=>{
     const index=Number(e.target.value),loc=state.poiIndex?.points[index];
-    if(loc){moveTo(loc);$('selected-readout').textContent='Located '+loc.name+' • X '+fmt(loc.x)+' / Z '+fmt(loc.z)}
+    if(loc){
+      state.selected={x:loc.x,z:loc.z};coordsInSidebar(loc);
+      setCamera(P.view(loc.x,loc.z,Math.max(4,state.camera.zoom)));
+      $('selected-readout').textContent=loc.name+' • '+(loc.approximate?'approx. 100 m grid '+loc.grid:'X '+fmt(loc.x)+' / Z '+fmt(loc.z));
+    }
   };
   $('tile-file').addEventListener('change',async e=>{
     const file=e.target.files?.[0];e.target.value='';if(!file)return;
@@ -885,6 +932,8 @@
   window.addEventListener('resize',resize);
   if('ResizeObserver'in window)new ResizeObserver(resize).observe(region);
   $('show-grid').checked=state.showGrid;
+  state.showSpawns=false;$('show-spawns').checked=false;
   $('show-trees').checked=state.showTrees;
+  mergePermanentPlaces();
   resize();updateZoom();renderMarkerList();void restoreCached();
 })();

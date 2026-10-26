@@ -4,12 +4,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),advanced=load('advanced.js'),places=load('places.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
 check('All JavaScript sources are local and present',()=>{
- assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('../vendor/jszip.min.js'));
+ assert(scripts.includes('./storage.js'));assert(scripts.includes('./app.js'));assert(scripts.includes('./projection.js'));assert(scripts.includes('./mapdata.js'));assert(scripts.includes('./advanced.js'));assert(scripts.includes('./places.js'));assert(scripts.includes('../vendor/jszip.min.js'));
  assert(scripts.indexOf('../vendor/jszip.min.js')<scripts.indexOf('./app.js'));
  for(const src of scripts){assert(src.startsWith('./')||src.startsWith('../vendor/'));assert(fs.existsSync(path.join(root,src)))}
 });
@@ -156,6 +156,37 @@ check('Minimap draws from cached thumbnail rather than decoding satellite every 
  assert(app.includes('let overviewThumb=null'));
  assert(app.includes('if(!overviewThumb)'));
  assert(app.includes('painter.drawImage(state.image,0,0,w,h)'));
+});
+
+
+check('Real Nasdara named locations are bundled and displayed without an upload',()=>{
+ assert(places.includes('ZedForgePlaces'));
+ assert(app.includes('poiIndex:A.groupPoints(PL?.points||[])'));
+ assert(app.includes('mergePermanentPlaces()'));
+ assert(app.includes('permanent Nasdara places ready'));
+ assert(html.includes('78 named Nasdara locations included'));
+ assert(html.includes('www.nasdaramap.com/guide'));
+});
+check('Place categories have distinct symbols, colours, and separate visibility filters',()=>{
+ for(const id of ['show-pois','show-villages','show-military','show-industry']){
+  assert(html.includes('id="'+id+'"'));
+  assert(app.includes("'"+id+"'"));
+ }
+ assert(app.includes("military:'★'"));
+ assert(app.includes("airfield:'✈'"));
+ assert(app.includes("industrial:'⚙'"));
+ assert(app.includes('function poiVisible(loc)'));
+});
+check('Existing custom place imports add to the built-in map rather than replacing it',()=>{
+ assert(app.includes('mergePermanentPlaces(list)'));
+ assert(app.includes("records.set(p.name.toLocaleLowerCase(),p)"));
+ assert(app.includes("A.groupPoints(Array.from(records.values()))"));
+});
+check('Dynamic events are hidden until their distinct icon system is ready',()=>{
+ assert(app.includes('showSpawns:false'));
+ assert(html.includes('id="show-spawns" type="checkbox" disabled'));
+ assert(html.includes('for="events-file" hidden'));
+ assert(!app.includes("['show-spawns','spawns'],['show-grid','grid']"));
 });
 
 console.log('\n'+passed+' Map Lab interface checks passed.');
