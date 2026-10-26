@@ -12,6 +12,8 @@
 <script src="./vendor/jszip.min.js" defer></script>
 <script src="./app.js" defer></script>
 <script src="./studios.js" defer></script>
+<script src="./spawn-engine.js" defer></script>
+<script src="./spawn-studio.js" defer></script>
 </head>
 <body data-theme="obsidian">
 <div class="shell">
@@ -25,13 +27,14 @@
   <button class="nav-link" data-view="editor"><span>✎</span> Item Editor</button>
   <button class="nav-link" data-view="spawnables"><span>⚙</span> Spawnable Studio</button>
   <button class="nav-link" data-view="events"><span>◎</span> Events Studio</button>
+  <button class="nav-link" data-view="spawns"><span>⌖</span> Event Spawn Studio</button>
   <button class="nav-link" data-view="changes"><span>⇄</span> Change Review</button>
   <button class="nav-link" data-view="validation"><span>◇</span> Validation</button>
  </nav>
  <div class="side-label second-label">COMING LATER</div>
  <a class="muted-link" href="./map-lab/" title="Open the experimental Nasdara satellite map prototype">⌖ Nasdara Map Lab <span>PREVIEW</span></a>
  <div class="muted-link">✧ Loadout Studio <span>SOON</span></div>
- <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.3.0</b></div><p>Local processing • No account needed</p></div>
+ <div class="sidebar-bottom"><div class="version">ALPHA <b>v0.4.0</b></div><p>Local processing • No account needed</p></div>
 </aside>
 <div class="main-wrap">
 <header class="topbar"><button class="menu-button" id="mobile-menu" aria-label="Toggle menu">☰</button><div class="breadcrumb">ZEDFORGE <span>/</span> <strong id="page-crumb">Overview</strong></div><div class="header-right"><span class="local-badge"><i></i> LOCAL WORKSPACE</span><select id="theme" aria-label="Interface theme"><option value="obsidian">Obsidian</option><option value="tactical">Tactical Olive</option><option value="midnight">Midnight Blue</option><option value="arctic">Arctic Light</option></select></div></header>
@@ -150,6 +153,35 @@
   <p class="studio-hint">Applying a second multiplier compounds previous changes. The actual vehicle count is limited by spawn positions and the game's economy.</p>
  </div>
 </section>
+<section class="view hidden" id="view-spawns">
+  <div class="page-heading compact"><div class="eyebrow">DYNAMIC ECONOMY / CFGEVENTSPAWNS.XML</div><h1>Event Spawn Studio.</h1><p>Edit actual spawn coordinates and orientation in the files you import. Existing event names, positions, comments and unrelated XML formatting are preserved.</p></div>
+  <div class="notice"><strong>Safe editor:</strong> Positions are updated only when you select Save. No automatic game/server changes, no new spawn entries and no invented event positions. Verify the map and your server backup before deployment.</div>
+  <div class="panel"><div class="studio-layout">
+    <div class="studio-browser">
+      <label class="field-label" for="spawns-file">Spawn configuration</label><select id="spawns-file"><option value="">Import cfgeventspawns.xml</option></select>
+      <label class="field-label" for="spawns-world">World coordinate limits</label><select id="spawns-world"><option value="nasdara">Nasdara / Badlands (16,384 m)</option><option value="chernarus">Chernarus (15,360 m)</option><option value="livonia">Livonia (12,800 m)</option></select>
+      <label class="field-label" for="spawns-search">Search event name</label><input id="spawns-search" type="search" placeholder="Vehicle, Static, Animal…">
+      <label class="field-label" for="spawns-event">Event</label><select id="spawns-event" size="8" aria-label="Choose event"></select>
+      <label class="field-label" for="spawns-position">Spawn position</label><select id="spawns-position" size="8" aria-label="Choose position"></select>
+      <div class="studio-count" id="spawns-total">No positions loaded</div>
+    </div>
+    <div class="studio-detail">
+      <div class="section-eyebrow">SELECTED SPAWN POSITION</div><h2 id="spawns-heading">Select a spawn location</h2>
+      <div id="spawns-meta" class="studio-caption">Import an existing cfgeventspawns.xml file to begin.</div>
+      <div class="studio-section"><h3>Game-world coordinates</h3>
+        <div class="studio-form-grid">
+          <label>X (metres east)<input id="spawns-x" type="number" min="0" max="16384" step="0.001" disabled></label>
+          <label>Z (metres north)<input id="spawns-z" type="number" min="0" max="16384" step="0.001" disabled></label>
+          <label>Orientation (degrees)<input id="spawns-a" type="number" min="-1" max="360" step="0.001" disabled></label>
+        </div>
+        <p class="studio-help">Existing coordinates are edited in place. The orientation input stays unavailable if the imported position does not contain an <code>a</code> attribute.</p>
+      </div>
+      <div class="toolbar"><button id="spawns-map" class="secondary" disabled>Pick X/Z in Nasdara Map Lab</button><span id="spawns-world-message" class="studio-hint">Map picking is available for Nasdara.</span></div>
+      <div id="spawns-feedback" class="feedback" role="status" aria-live="polite">Changes require saving and can be undone.</div>
+      <div class="toolbar"><button class="primary" id="spawns-save" disabled>Save position</button><button class="secondary" id="spawns-undo" disabled>Undo</button><button class="secondary" id="spawns-redo" disabled>Redo</button><button class="secondary" id="spawns-download" disabled>Download XML</button></div>
+    </div>
+  </div></div>
+</section>
 <section class="view hidden" id="view-changes">
  <div class="page-heading compact"><div class="eyebrow">QUALITY CONTROL / CHANGE REVIEW</div><h1>Know exactly what changed.</h1><p>Compare the currently edited configuration with the originally imported files before downloading anything.</p></div>
  <div class="toolbar"><label class="change-select-label">Select file <select id="changes-file"><option value="">No files imported</option></select></label><button class="secondary" id="changes-undo">Undo last edit</button><button class="secondary" id="changes-redo">Redo edit</button><button class="secondary" id="changes-export">Export changed ZIP</button></div>
@@ -160,7 +192,7 @@
  <div class="toolbar"><button class="primary" id="run-validation">Run validation</button></div>
  <div class="panel table-panel"><div class="panel-title"><h2>Validation report</h2><span id="validation-count">No scan yet</span></div><div id="validation-results" class="validation-results"><div class="empty">Import files and run validation.</div></div></div>
 </section>
-</main><footer>ZEDFORGE <span>•</span> v0.1.0 Alpha <span>•</span> Unofficial community tooling, not affiliated with Bohemia Interactive.</footer></div></div>
+</main><footer>ZEDFORGE <span>•</span> v0.4.0 Alpha <span>•</span> Unofficial community tooling, not affiliated with Bohemia Interactive.</footer></div></div>
 <input type="file" id="file-input" accept=".xml,.json,.zip" multiple hidden>
 <dialog id="boost-dialog"><div class="dialog-inner"><div class="section-eyebrow">REVIEW CHANGESET</div><h2>Confirm loot boost</h2><p id="dialog-summary"></p><div class="diff-wrap"><table><thead><tr><th>Classname</th><th>Nominal</th><th>Minimum</th></tr></thead><tbody id="diff-body"></tbody></table></div><div class="toolbar right"><button class="secondary" id="cancel-boost">Cancel</button><button class="primary" id="apply-boost">Apply changes</button></div></div></dialog>
 <div id="toast" role="status" aria-live="polite"></div>

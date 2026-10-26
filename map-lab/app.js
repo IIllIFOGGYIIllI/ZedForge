@@ -808,6 +808,8 @@
     drawImage();drawTiles();if(state.showGrid)drawWorldGrid();drawWorldBounds();drawRoads();drawStructures();drawTrees();drawEvents();drawAccuracyBoundary();drawLocations();drawServices();drawMarkers();drawSelection();drawMeasurement();updateScale();drawOverview();updateLayerInfo();metrics(start)
   }
   function setCamera(next){state.camera=next;updateZoom();schedule();invalidateStructures();saveView()}
+  const spawnPickerParams=new URLSearchParams(window.location.search);
+  const spawnPicking=spawnPickerParams.get('spawn-picker')==='1';
   function moveTo(p){if(!worldValid(p))return notify('Coordinates must be inside Nasdara: X and Z between 0 and 16384');
     state.selectedLocation=null;updateAccuracyReadout(null);
     state.selected={x:p.x,z:p.z};coordsInSidebar(p);setCamera(P.view(p.x,p.z,Math.max(2.5,state.camera.zoom)));
@@ -885,6 +887,15 @@
     const wasDrag=state.drag.moved;
     state.drag=null;region.classList.remove('dragging');
     if(!wasDrag){const p=worldFromPointer(e);if(worldValid(p)){
+      if(spawnPicking){
+        if(window.opener&&window.opener!==window){
+          window.opener.postMessage({type:'zedforge:event-spawn-coordinate',x:Number(p.x.toFixed(3)),z:Number(p.z.toFixed(3))},window.location.origin);
+          notify('X/Z sent to Event Spawn Studio. Review and save the position there.');
+        }else notify('Open Map Lab using the Event Spawn Studio picker to send coordinates back.');
+        state.selected={x:p.x,z:p.z};coordsInSidebar(p);
+        $('selected-readout').textContent='Picked X '+fmt(p.x)+' • Z '+fmt(p.z);
+        schedule();return;
+      }
       if(state.measuring){
         if(!state.measurement?.start||state.measurement.end)state.measurement={start:{x:p.x,z:p.z},end:null};
         else{state.measurement.end={x:p.x,z:p.z};state.measuring=false;region.classList.remove('measuring');$('measure-toggle').classList.remove('active');$('measure-toggle').textContent='Measure distance';
@@ -1173,5 +1184,13 @@
   state.showSpawns=false;$('show-spawns').checked=false;
   $('show-trees').checked=state.showTrees;
   mergePermanentPlaces();
-  resize();updateZoom();renderMarkerList();void restoreCached();
+  resize();updateZoom();renderMarkerList();
+  void restoreCached().then(()=>{
+    const rawX=spawnPickerParams.get('x'),rawZ=spawnPickerParams.get('z');
+    if(rawX!==null&&rawZ!==null&&rawX.trim()&&rawZ.trim()){
+      const x=Number(rawX),z=Number(rawZ);
+      if(P.validateWorld(x,z))moveTo({x,z});
+    }
+    if(spawnPicking)notify('Event Spawn Studio picker: click a map location to copy X/Z back to the editor.');
+  });
 })();

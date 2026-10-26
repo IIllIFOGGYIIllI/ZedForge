@@ -1,4 +1,8 @@
-# Nasdara interactive map — coordinate and navigation stability (v0.6.1)
+# Nasdara interactive map — coordinate and navigation stability (v0.6.2)
+
+## ZedForge Event Spawn Studio handoff
+
+Opening Map Lab through Event Spawn Studio includes a same-origin coordinate-picker request. The map focuses the existing X/Z position, and a normal click returns real Nasdara X/Z to the opener without creating permanent markers or editing XML. The Event Spawn Studio requires a separate explicit Save action. The hidden event-position layer remains excluded pending proper icons.
 
 **The ZedForge map is standalone. The World War Z website is not modified.**
 

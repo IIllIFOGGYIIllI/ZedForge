@@ -4,6 +4,17 @@
 
 Website: https://IIllIFOGGYIIllI.github.io/ZedForge/
 
+## v0.4.0 Alpha
+
+### Event Spawn Studio (new)
+
+- Import existing `cfgeventspawns.xml` through File Manager; search named events and edit an individual existing `pos` X/Z and optional `a` orientation.
+- Choose Nasdara, Chernarus or Livonia limits. The editor preserves original XML structure, comments and unrelated attributes; it never invents locations or adds missing attributes.
+- Use **Pick X/Z in Nasdara Map Lab** to open the existing local map, click a location and copy its real X/Z back to the editor. The source file changes only after clicking Save.
+- Undo/redo, review and download use ZedForge's existing local history and changed-file-only ZIP workflow. Validation blocks export for invalid coordinates/structure and warns about duplicate positions.
+- No event markers have been added to the map without proper icons; map-assisted picking is a coordinate tool only.
+- The Map Lab continues independently; no World War Z website changes or Nitrado connection.
+
 ## v0.3.0 Alpha
 
 ### Current tools
@@ -45,6 +56,7 @@ From this repository:
 python -m http.server 8000
 node tests/run-tests.mjs
 node tests/studios-tests.mjs
+node tests/event-spawn-tests.mjs
 ```
 
 Open http://localhost:8000. JavaScript and ZIP processing have no external runtime CDN dependencies.
