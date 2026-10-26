@@ -4,6 +4,17 @@
 
 This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
+## Nasdara junction continuity and vegetation enhancement
+
+- Neighbouring road endpoints are conservatively joined **only if** they are within 6.5 metres, use the same road class, face one another and have an unambiguous nearest match.
+- Source `.roads` coordinates are never rewritten; short connecting segments exist only in the browser-rendered overlay. Long gaps, parallel carriageways and uncertain connections are left untouched.
+- Roads now use rounded caps. All paved/dirt outlines are painted first and their lighter centre strokes afterward, avoiding dark wedges at intersections.
+- Junction repairs are included in the stable wide-area road image and spatially indexed close-up rendering.
+- **Vegetation detail** (0–100%) selectively highlights existing green/olive pixels from the original satellite image. It operates locally, can be turned completely off and does not invent trees or improve the image's native resolution.
+- Vegetation masks are calculated once when imagery is loaded, then composited with the same calibrated world projection; the map's source image remains unchanged.
+- Road visibility remains independently adjustable and retains the brighter, high-contrast style.
+- In the tested 47,236-segment Nasdara road dataset, 23,646 conservative links met the alignment and short-gap criteria. This is a rendering repair count, not a modification to the imported game data; some ambiguous junctions are deliberately excluded.
+
 ## Building flicker and performance update
 
 After reviewing the second in-browser video from 26 October, the previous
@@ -87,7 +98,7 @@ Binary parsers are strict: `DVMROAD1` has a 16-byte header and 20-byte segments,
 - The viewer **does not bundle any DayZ images**. Local loading is not redistribution permission.
 - It does not load official game archives directly; separate extraction/conversion is required.
 - Imported `cfgeventspawns.xml` is read-only here; marker CSV is not game-ready spawn XML.
-- The source satellite image cannot gain texture detail just by zooming. For more detailed imagery, a higher-resolution licensed terrain source and texture rendering/picture layers are needed.
+- The source satellite image cannot gain texture detail just by zooming. Vegetation detail is a colour-based enhancement, not a tree-position dataset. For individual trees or richer ground textures, higher-resolution licensed imagery or terrain/object asset data is required.
 - Some structure records are deliberately not drawn at far zoom to preserve speed.
 - Structures without a matching numbered picture fall back to polygon footprints. Pictures and the structure binary must share the same model index mapping; files from different releases may be incompatible.
 - No code or data from this build has been merged into the World War Z website.
@@ -101,6 +112,7 @@ node map-lab/interface.test.cjs
 node map-lab/mapdata.test.cjs
 node map-lab/road-stability.test.cjs
 node map-lab/building-stability.test.cjs
+node map-lab/vegetation.test.cjs
 ```
 
 Large-volume synthetic stress checks were also performed at the reference record counts. Browser testing with actual independently published files and terrain data is still required before treating visual quality or exact alignment as verified.

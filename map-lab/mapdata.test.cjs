@@ -144,4 +144,44 @@ check('Completed textured roofs report their real drawn picture count',()=>{
  }finally{if(original===undefined)delete global.Path2D;else global.Path2D=original}
 });
 
+
+check('Short aligned road gaps are joined without changing original segments',()=>{
+ const coords=new Float32Array([100,200,180,200,185,200,265,200]);
+ const layer=M.buildRoadIndex({format:'synthetic',count:2,values:coords,kinds:new Uint8Array([0,0]),asphalt:2,dirt:0});
+ assert.equal(layer.baseCount,2);assert.equal(layer.count,2);
+ assert.equal(layer.repairedJoins,1);assert.equal(layer.drawCount,3);
+ assert.deepEqual(Array.from(layer.values.slice(0,8)),Array.from(coords));
+ assert.deepEqual(Array.from(layer.values.slice(8,12)),[180,200,185,200]);
+ assert.deepEqual(M.collectRoadSegments(layer,{x0:181,x1:183,z0:199,z1:201}).includes(2),true);
+});
+check('No artificial connectors across parallel lanes or unrelated roads',()=>{
+ const l=M.buildRoadIndex({count:2,
+   values:new Float32Array([100,200,180,200,100,205,180,205]),
+   kinds:new Uint8Array([0,0])});
+ assert.equal(l.repairedJoins,0);
+ const other=M.buildRoadIndex({count:2,
+   values:new Float32Array([100,200,180,200,185,200,265,200]),
+   kinds:new Uint8Array([0,1])});
+ assert.equal(other.repairedJoins,0);
+});
+check('Long gaps and directionally opposed candidates remain disconnected',()=>{
+ const long=M.buildRoadIndex({count:2,values:new Float32Array([100,200,180,200,200,200,280,200]),kinds:new Uint8Array([0,0])});
+ assert.equal(long.repairedJoins,0);
+ const reversed=M.buildRoadIndex({count:2,values:new Float32Array([100,200,180,200,185,200,105,200]),kinds:new Uint8Array([0,0])});
+ assert.equal(reversed.repairedJoins,0);
+});
+check('Intersection styling keeps round ends and paints all outlines first',()=>{
+ const calls=[];
+ const ctx={save(){},restore(){},beginPath(){calls.push('begin')},moveTo(){},lineTo(){},
+   stroke(){calls.push(['stroke',this.strokeStyle,this.lineWidth])}};
+ const layer={values:new Float32Array([100,200,110,200,105,190,105,210]),kinds:new Uint8Array([0,1])};
+ const count=M.paintRoadSegments(ctx,layer,[0,1],(x,z)=>({x,y:z}));
+ assert.equal(count,2);
+ assert.equal(ctx.lineCap,'round');
+ const paints=calls.filter(a=>Array.isArray(a));
+ assert.equal(paints.length,4);
+ assert(paints[0][2]>paints[2][2], 'Edges precede road interiors');
+ assert(paints[1][2]>paints[3][2], 'Both classes outlined before filling');
+});
+
 console.log('\n'+passed+' detailed map layer checks passed.');

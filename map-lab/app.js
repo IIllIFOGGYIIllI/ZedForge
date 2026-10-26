@@ -1,12 +1,12 @@
 'use strict';
 /* ZedForge Map Lab — browser-only Nasdara prototype; no proprietary map assets shipped. */
 (() => {
-  const P=window.ZedForgeProjection,M=window.ZedForgeMapData;
+  const P=window.ZedForgeProjection,M=window.ZedForgeMapData,V=window.ZedForgeVegetation;
   const EXTENT=P.EXTENT, $=id=>document.getElementById(id);
   const canvas=$('map-canvas'),region=$('map-region'),ctx=canvas.getContext('2d',{alpha:false});
   const state={camera:P.view(),width:0,height:0,dpr:1,image:null,imageUrl:null,roads:[],eventSpawns:[],eventNames:[],
     markers:[],cursor:null,selected:null,drag:null,pointerDown:null,showRoads:true,showSpawns:true,showGrid:false,showMarkers:true,imageFile:null,selectedMarkerIndex:null,
-    roadLayer:null,objectLayer:null,roadVisibility:1.2,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
+    roadLayer:null,objectLayer:null,roadVisibility:1.2,vegetationDetail:.6,vegetationOverlay:null,showAsphalt:true,showDirt:true,showStructures:true,showOverview:true,satelliteTone:'natural',overlayAlpha:.85,measuring:false,measurement:null,structureStats:{drawn:0,pictures:0,visible:0}};
   let toastId=0,frame=0,saveTimer=0,cacheChain=Promise.resolve(),interacted=false;
 
   /*
@@ -91,7 +91,7 @@
     off.width=ROAD_OVERVIEW_RES;off.height=ROAD_OVERVIEW_RES;
     const offctx=off.getContext('2d',{alpha:true});
     if(!offctx)throw Error('Unable to allocate road overlay canvas');
-    const indices=Array.from({length:layer.count},(_,i)=>i),factor=ROAD_OVERVIEW_RES/EXTENT;
+    const indices=Array.from({length:layer.drawCount||layer.count},(_,i)=>i),factor=ROAD_OVERVIEW_RES/EXTENT;
     M.paintRoadSegments(offctx,layer,indices,(x,z)=>({x:x*factor,y:(EXTENT-z)*factor}),{
       asphalt:state.showAsphalt,dirt:state.showDirt,overview:true,opacity:1
     });
@@ -179,7 +179,7 @@
         camera:state.camera,markers:state.markers,selected:state.selected,
         flags:{roads:state.showRoads,spawns:state.showSpawns,grid:state.showGrid,markers:state.showMarkers,
           structures:state.showStructures,asphalt:state.showAsphalt,dirt:state.showDirt,overview:state.showOverview},
-        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,
+        satelliteTone:state.satelliteTone,overlayAlpha:state.overlayAlpha,roadVisibility:state.roadVisibility,vegetationDetail:state.vegetationDetail,
         filter:$('event-filter').value
       };
       try{await queueCache('session',session);setCacheStatus('✓ Map settings saved locally')}
@@ -234,6 +234,11 @@
     if(!restored)interacted=true;
     if(state.image?.close)state.image.close();
     state.image=image;state.imageFile=file;
+    state.vegetationOverlay=null;
+    try{
+      const overlay=V.makeOverlay(image,()=>document.createElement('canvas'));
+      state.vegetationOverlay=overlay.canvas;
+    }catch(err){notify('Vegetation enhancement unavailable: '+err.message)}
     const filename=file.name||'Locally cached satellite image';
     $('image-status').textContent=filename+' • '+image.width+' × '+image.height+' pixels • '+(file.size/1024/1024).toFixed(1)+' MB';
     $('map-credit').textContent='Local satellite imagery • '+filename;
@@ -269,6 +274,10 @@
         $('road-visibility').value=String(Math.round(state.roadVisibility*100));
       }
       $('road-visibility-value').textContent=Math.round(state.roadVisibility*100)+'%';
+      if(Number.isFinite(session?.vegetationDetail))
+        state.vegetationDetail=Math.max(0,Math.min(1,session.vegetationDetail));
+      $('vegetation-detail').value=String(Math.round(state.vegetationDetail*100));
+      $('vegetation-detail-value').textContent=Math.round(state.vegetationDetail*100)+'%';
       if(roads?.blob instanceof Blob){
         try{await loadRoadLayer(roads.blob,{restored:true,name:roads.name});}catch(e){notify('Could not restore roads: '+e.message)}
       }else if(roads&&Array.isArray(roads.lines)){
@@ -330,7 +339,12 @@
     if(w<1||h<1)return;
     ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
     ctx.filter=state.satelliteTone==='vivid'?'contrast(1.25) saturate(1.27) brightness(1.07)':state.satelliteTone==='lowlight'?'contrast(1.14) saturate(.8) brightness(.66)':'none';
-    ctx.drawImage(state.image,a.x,a.y,w,h);ctx.restore()
+    ctx.drawImage(state.image,a.x,a.y,w,h);
+    if(state.vegetationDetail>0&&state.vegetationOverlay){
+      ctx.filter='none';ctx.globalAlpha=state.vegetationDetail;
+      ctx.drawImage(state.vegetationOverlay,a.x,a.y,w,h);
+    }
+    ctx.restore()
   }
   function drawRoads(){
     const layer=state.roadLayer;
@@ -484,6 +498,7 @@
   $('satellite-tone').onchange=e=>{state.satelliteTone=e.target.value;schedule();saveView()};
   $('overlay-alpha').oninput=e=>{state.overlayAlpha=Number(e.target.value)/100;$('overlay-alpha-value').textContent=e.target.value+'%';schedule();invalidateStructures();saveView()};
   $('road-visibility').oninput=e=>{state.roadVisibility=Number(e.target.value)/100;$('road-visibility-value').textContent=e.target.value+'%';schedule();saveView()};
+  $('vegetation-detail').oninput=e=>{state.vegetationDetail=Number(e.target.value)/100;$('vegetation-detail-value').textContent=e.target.value+'%';schedule();saveView()};
   $('toggle-sidebar').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
   $('focus-map').onclick=()=>{document.body.classList.toggle('focus-mode');setTimeout(resize,60)};
   const overview=$('overview-canvas');
@@ -559,7 +574,7 @@
     const roads=/\.roads$/i.test(filename)?M.parseRoads(await file.arrayBuffer()):M.parseGeoJSON(JSON.parse(await file.text()));
     state.roadLayer=roads;
     rebuildRoadOverview();
-    $('roads-status').textContent=roads.count.toLocaleString()+' road segments ('+roads.asphalt.toLocaleString()+' paved / '+roads.dirt.toLocaleString()+' dirt) • '+filename;
+    $('roads-status').textContent=roads.count.toLocaleString()+' segments • '+(roads.repairedJoins||0).toLocaleString()+' short gaps smoothed • '+filename;
     if(!restored){interacted=true;void cacheLayer('roads',{blob:file,name:filename},'roads')}
     schedule();notify('Loaded '+roads.count.toLocaleString()+' accurate road segments');return roads;
   }

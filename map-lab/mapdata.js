@@ -75,8 +75,76 @@
       }
     }
     layer.grid=grid;layer.gridLinks=links;
+    layer.baseCount=layer.count;
+    const joins=repairRoadJunctions(layer);
+    if(joins.length){
+      const coordinates=new Float32Array(layer.values.length+joins.length*4),
+        kinds=new Uint8Array(layer.kinds.length+joins.length);
+      coordinates.set(layer.values);kinds.set(layer.kinds);
+      for(let j=0;j<joins.length;j++){
+        const p=joins[j],index=layer.count+j;
+        coordinates.set(p.slice(0,4),index*4);kinds[index]=p[4];
+        const a=Math.max(0,Math.min(63,Math.floor(Math.min(p[0],p[2])/CELL))),
+          b=Math.max(0,Math.min(63,Math.floor(Math.max(p[0],p[2])/CELL))),
+          c=Math.max(0,Math.min(63,Math.floor(Math.min(p[1],p[3])/CELL))),
+          d=Math.max(0,Math.min(63,Math.floor(Math.max(p[1],p[3])/CELL)));
+        for(let y=c;y<=d;y++)for(let x=a;x<=b;x++)grid[y*GRID+x].push(index);
+      }
+      layer.values=coordinates;layer.kinds=kinds;
+    }
+    layer.drawCount=layer.count+joins.length;
+    layer.repairedJoins=joins.length;
     return layer;
   }
+  /* Only bridge unambiguous same-class endpoints which face each other.
+   * Original road geometry is untouched; links live in the render layer. */
+  function repairRoadJunctions(layer,{maxGap=6.5,minGap=.25,alignment=.6}={}){
+    if(!layer?.count)return[];
+    const data=layer.values,types=layer.kinds,cell=8,ends=[],bins=new Map();
+    const bin=(x,z,type)=>type+':'+x+':'+z;
+    for(let i=0;i<layer.count;i++){
+      const p=i*4,x=data[p],z=data[p+1],ex=data[p+2],ez=data[p+3],
+        dx=ex-x,dz=ez-z,len=Math.hypot(dx,dz);
+      if(len<1)continue;
+      for(let n=0;n<2;n++){
+        const px=n?ex:x,pz=n?ez:z;
+        const end={x:px,z:pz,ux:(n?dx:-dx)/len,uz:(n?dz:-dz)/len,kind:types[i],segment:i};
+        const index=ends.length;ends.push(end);
+        const key=bin(Math.floor(px/cell),Math.floor(pz/cell),end.kind);
+        if(!bins.has(key))bins.set(key,[]);
+        bins.get(key).push(index);
+      }
+    }
+    const preferred=new Int32Array(ends.length).fill(-1);
+    for(let i=0;i<ends.length;i++){
+      const a=ends[i],ix=Math.floor(a.x/cell),iz=Math.floor(a.z/cell);
+      let best=-1,score=Infinity,runnerUp=Infinity;
+      for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++){
+        const near=bins.get(bin(ix+ox,iz+oz,a.kind));
+        if(!near)continue;
+        for(const j of near){
+          const b=ends[j];if(i===j||a.segment===b.segment)continue;
+          const x=b.x-a.x,z=b.z-a.z,d=Math.hypot(x,z);
+          if(d<=minGap||d>maxGap)continue;
+          const forward=(a.ux*x+a.uz*z)/d;
+          const backward=-(b.ux*x+b.uz*z)/d;
+          if(forward<alignment||backward<alignment)continue;
+          const candidate=d+(2-forward-backward)*2;
+          if(candidate<score){runnerUp=score;score=candidate;best=j}
+          else if(candidate<runnerUp)runnerUp=candidate;
+        }
+      }
+      if(best>=0&&runnerUp-score>0.75)preferred[i]=best;
+    }
+    const joins=[];
+    for(let i=0;i<ends.length;i++){
+      const j=preferred[i];if(j<=i||preferred[j]!==i)continue;
+      const a=ends[i],b=ends[j];
+      joins.push([a.x,a.z,b.x,b.z,a.kind]);
+    }
+    return joins;
+  }
+
   function collectRoadSegments(layer,bounds,limit=1000000){
     if(!layer||!bounds||bounds.x0>EXTENT||bounds.z0>EXTENT||
       bounds.x1<0||bounds.z1<0||bounds.x0>bounds.x1||bounds.z0>bounds.z1)return[];
@@ -99,33 +167,36 @@
   /* Same road strokes for cached overview and live close-up vectors.
    * The renderer never clears the destination canvas, allowing offscreen
    * layers to be composed as finished frames instead of displayed mid-draw. */
+  /* Paint outlines for all road classes, then centres for all classes.
+   * Rounded ends and repaired short gaps remove seams at junctions. */
   function paintRoadSegments(ctx,layer,indices,project,{
     asphalt=true,dirt=true,overview=false,opacity=1
   }={}){
     if(!layer||!indices?.length)return 0;
     const v=layer.values,kinds=layer.kinds;
-    let count=0;
-    ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
-    const layers=[
-      {kind:1,enabled:dirt,outer:'#494238',inner:'#e4d4b4',outerWidth:overview?1.30:2.30,innerWidth:overview ? 0.70 : 1.30},
-      {kind:0,enabled:asphalt,outer:'#3c3b33',inner:'#fff0d1',outerWidth:overview?1.75:3.25,innerWidth:overview ? 1.00 : 2.00}
+    const styles=[
+      {kind:1,enabled:dirt,outer:'#494238',inner:'#e4d4b4',
+        outerWidth:overview?1.30:2.30,innerWidth:overview?0.70:1.30},
+      {kind:0,enabled:asphalt,outer:'#3c3b33',inner:'#fff0d1',
+        outerWidth:overview?1.75:3.25,innerWidth:overview?1.00:2.00}
     ];
-    for(const style of layers){
-      if(!style.enabled)continue;
-      let plotted=0;
-      ctx.beginPath();
-      for(const i of indices){
-        if(kinds[i]!==style.kind)continue;
-        const k=i*4,a=project(v[k],v[k+1]),b=project(v[k+2],v[k+3]);
-        ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);plotted++;
+    ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
+    for(const phase of ['outer','inner']){
+      for(const style of styles){
+        if(!style.enabled)continue;
+        ctx.beginPath();let amount=0;
+        for(const i of indices){
+          if(kinds[i]!==style.kind)continue;
+          const k=i*4,a=project(v[k],v[k+1]),b=project(v[k+2],v[k+3]);
+          ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);amount++;
+        }
+        if(!amount)continue;
+        ctx.strokeStyle=style[phase];ctx.lineWidth=phase==='outer'?style.outerWidth:style.innerWidth;
+        ctx.stroke();
       }
-      if(!plotted)continue;
-      ctx.strokeStyle=style.outer;ctx.lineWidth=style.outerWidth;ctx.stroke();
-      ctx.strokeStyle=style.inner;ctx.lineWidth=style.innerWidth;ctx.stroke();
-      count+=plotted;
     }
     ctx.restore();
-    return count;
+    return indices.reduce((n,i)=>n+((kinds[i]===0&&asphalt)||(kinds[i]===1&&dirt)?1:0),0);
   }
 
   function parseObjects(input){
@@ -269,5 +340,5 @@
     do{status=job.step(2000)}while(!status.done);
     return status;
   }
-  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures,createStructureJob,buildRoadIndex,collectRoadSegments,paintRoadSegments};
+  return{EXTENT,parseRoads,parseGeoJSON,parseObjects,collectVisible,renderStructures,createStructureJob,buildRoadIndex,collectRoadSegments,repairRoadJunctions,paintRoadSegments};
 });

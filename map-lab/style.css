@@ -52,3 +52,6 @@
 
 #road-visibility{display:block;width:100%;accent-color:var(--accent);margin:10px 0 4px}
 #road-visibility-value{float:right;color:var(--accent);font-weight:800}
+
+#vegetation-detail{display:block;width:100%;accent-color:var(--accent);margin:9px 0 4px}
+#vegetation-detail-value{float:right;color:var(--accent);font-weight:800}

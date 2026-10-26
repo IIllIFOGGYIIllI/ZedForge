@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=__dirname;
 const load=name=>fs.readFileSync(path.join(root,name),'utf8');
-const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),css=load('style.css');
+const html=load('index.html'),app=load('app.js'),projection=load('projection.js'),storage=load('storage.js'),mapdata=load('mapdata.js'),vegetation=load('vegetation.js'),css=load('style.css');
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(m=>m[1]);
 let passed=0;
 function check(name,fn){fn();console.log('PASS',name);passed++}
@@ -91,6 +91,21 @@ check('Bright roads have independently adjustable visibility',()=>{
  assert(app.includes('state.roadVisibility'));
  assert(app.includes('roadVisibility:state.roadVisibility'));
  assert(mapdata.includes("inner:'#fff0d1'"));
+});
+
+
+check('Satellite trees can be enhanced selectively without fabricating locations',()=>{
+ assert(html.includes('id="vegetation-detail"'));
+ assert(html.includes('id="vegetation-detail-value"'));
+ assert(app.includes('state.vegetationDetail'));
+ assert(app.includes("V.makeOverlay"));
+ assert(app.includes('state.vegetationOverlay'));
+ assert(vegetation.includes('vegetationStrength'));
+});
+check('Road smoothing links remain visible at both close and overview zoom',()=>{
+ assert(app.includes('layer.drawCount||layer.count'));
+ assert(mapdata.includes('repairRoadJunctions'));
+ assert(mapdata.includes("ctx.lineCap='round'"));
 });
 
 console.log('\n'+passed+' Map Lab interface checks passed.');
