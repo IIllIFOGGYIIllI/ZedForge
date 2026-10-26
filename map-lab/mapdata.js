@@ -175,10 +175,12 @@
     if(!layer||!indices?.length)return 0;
     const v=layer.values,kinds=layer.kinds;
     const styles=[
-      {kind:1,enabled:dirt,outer:'#494238',inner:'#e4d4b4',
-        outerWidth:overview?1.30:2.30,innerWidth:overview?0.70:1.30},
-      {kind:0,enabled:asphalt,outer:'#3c3b33',inner:'#fff0d1',
-        outerWidth:overview?1.75:3.25,innerWidth:overview?1.00:2.00}
+      // Dirt stays muted; paved roads receive a distinct golden centre.
+      // Keep existing overview widths to avoid overwhelming distant terrain.
+      {kind:1,enabled:dirt,outer:'#4b4338',inner:'#d8c29a',
+        outerWidth:overview?1.30:2.80,innerWidth:overview?0.70:1.70},
+      {kind:0,enabled:asphalt,outer:'#5a4a1f',inner:'#f2d35b',
+        outerWidth:overview?1.75:4.00,innerWidth:overview?1.00:2.60}
     ];
     ctx.save();ctx.globalAlpha=opacity;ctx.lineJoin='round';ctx.lineCap='round';
     for(const phase of ['outer','inner']){

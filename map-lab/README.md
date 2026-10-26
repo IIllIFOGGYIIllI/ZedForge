@@ -4,6 +4,14 @@
 
 This is a separate ZedForge satellite-map prototype. It has **not modified or replaced the World War Z website map**.
 
+## Yellow paved-road styling and close-zoom widths
+
+- **Paved roads:** golden yellow `#f2d35b` centres, dark brown `#5a4a1f` borders.
+- **Dirt roads:** muted tan `#d8c29a` centres, brown-grey `#4b4338` borders.
+- **Close zoom:** paved strokes expand from 3.25/2.0 to **4.0/2.6 px** (outer/inner); dirt from 2.30/1.30 to **2.8/1.7 px**.
+- **Overview:** unchanged stroke widths; the yellow paved classification remains visible without crowding the map.
+- Existing zoom-dependent buffers, intersection repairs, visibility slider, building renderer and vegetation control are untouched.
+
 ## Nasdara junction continuity and vegetation enhancement
 
 - Neighbouring road endpoints are conservatively joined **only if** they are within 6.5 metres, use the same road class, face one another and have an unambiguous nearest match.

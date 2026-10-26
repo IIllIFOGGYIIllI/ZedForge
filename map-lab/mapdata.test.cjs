@@ -184,4 +184,24 @@ check('Intersection styling keeps round ends and paints all outlines first',()=>
  assert(paints[1][2]>paints[3][2], 'Both classes outlined before filling');
 });
 
+check('Yellow paved roads have wider outlines only at close zoom',()=>{
+ const layer={values:new Float32Array([10,20,30,40,40,50,60,70]),kinds:new Uint8Array([0,1])};
+ function collect(overview){
+  const strokes=[];
+  const ctx={save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},
+   stroke(){strokes.push({colour:this.strokeStyle,width:this.lineWidth})}};
+  M.paintRoadSegments(ctx,layer,[0,1],(x,z)=>({x,y:z}),{overview});
+  return strokes;
+ }
+ const detailed=collect(false),overview=collect(true);
+ assert.deepEqual(detailed,[
+  {colour:'#4b4338',width:2.8},{colour:'#5a4a1f',width:4},
+  {colour:'#d8c29a',width:1.7},{colour:'#f2d35b',width:2.6}
+ ]);
+ assert.deepEqual(overview,[
+  {colour:'#4b4338',width:1.3},{colour:'#5a4a1f',width:1.75},
+  {colour:'#d8c29a',width:.7},{colour:'#f2d35b',width:1}
+ ]);
+});
+
 console.log('\n'+passed+' detailed map layer checks passed.');

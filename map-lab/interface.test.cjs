@@ -90,7 +90,7 @@ check('Bright roads have independently adjustable visibility',()=>{
  assert(html.includes('id="road-visibility-value"'));
  assert(app.includes('state.roadVisibility'));
  assert(app.includes('roadVisibility:state.roadVisibility'));
- assert(mapdata.includes("inner:'#fff0d1'"));
+ assert(mapdata.includes("inner:'#f2d35b'"));
 });
 
 
