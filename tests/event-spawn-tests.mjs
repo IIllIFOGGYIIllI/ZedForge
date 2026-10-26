@@ -14,9 +14,9 @@ const sample=`<?xml version="1.0"?>
   <event name="StaticHeliCrash"><pos x="100" z="200" a="90" /></event>
 </eventposdef>`;
 function validDoc(xml){
-  const blocks=[...xml.matchAll(/<event\\b[^>]*name\\s*=\\s*(["'])([^"']+)\\1[^>]*>([\\s\\S]*?)<\\/event>/g)];
+  const blocks=[...xml.matchAll(/<event\b[^>]*name\s*=\s*(["'])([^"']+)\1[^>]*>([\s\S]*?)<\/event>/g)];
   return {documentElement:{localName:'eventposdef',children:blocks.map(b=>({
-    localName:'event',getAttribute:()=>b[2],children:[...b[3].matchAll(/<pos\\b[^>]*\\/>/g)].map(m=>({
+    localName:'event',getAttribute:()=>b[2],children:[...b[3].matchAll(/<pos\b[^>]*\/>/g)].map(m=>({
       localName:'pos',getAttribute:k=>(new RegExp('\\b'+k+'\\s*=\\s*(["\\\'])([^"\\\']*)\\1').exec(m[0])||[])[2]??null
     }))
   }))}};
